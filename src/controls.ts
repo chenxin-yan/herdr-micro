@@ -13,7 +13,7 @@ export type ControlEffect =
   | { readonly type: "focusAgent"; readonly paneId: string }
   | { readonly type: "sendKeys"; readonly paneId: string; readonly keys: readonly string[] }
   | { readonly type: "newAgent" }
-  | { readonly type: "hid"; readonly key: string }
+  | { readonly type: "hid"; readonly key: string; readonly down: boolean }
   | { readonly type: "selectWorkspace"; readonly delta: number }
   | { readonly type: "jumpToAttention"; readonly paneId: string };
 
@@ -47,8 +47,8 @@ export function reduceDeckMessage(
       ? { state, effects: [] }
       : { state, effects: [{ type: "selectWorkspace", delta: message.delta }] };
   }
-  if (!message.down) return { state, effects: [] };
   if (message.k === 12) {
+    if (!message.down) return { state, effects: [] };
     const attention = [
       ...fleet.filter(({ state: agentState }) => agentState === "blocked"),
       ...fleet.filter(({ state: agentState }) => agentState === "done"),
@@ -68,6 +68,7 @@ export function reduceDeckMessage(
 
   const page = projectFleet(fleet, state.pageIndex);
   if (message.k < 6) {
+    if (!message.down) return { state, effects: [] };
     const selected = page.slots[message.k];
     if (!selected) return { state, effects: [] };
     return {
@@ -77,6 +78,10 @@ export function reduceDeckMessage(
   }
 
   const action = commandKeys[String(message.k - 5) as keyof CommandKeys];
+  if (action.type === "keyAlias") {
+    return { state, effects: [{ type: "hid", key: action.key, down: message.down }] };
+  }
+  if (!message.down) return { state, effects: [] };
   switch (action.type) {
     case "none":
       return { state, effects: [] };
@@ -89,8 +94,6 @@ export function reduceDeckMessage(
     }
     case "newAgent":
       return { state, effects: [{ type: "newAgent" }] };
-    case "keyAlias":
-      return { state, effects: [{ type: "hid", key: action.key }] };
     case "enter":
       return {
         state,

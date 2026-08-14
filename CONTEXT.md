@@ -49,7 +49,7 @@ The Command Key that cycles Agent Pages and indicates whether an agent outside t
 _Avoid_: Overflow key, next key
 
 **Key Alias**:
-A user-configured single keyboard key selected by the Host and tapped by the Deck as USB HID, such as the right Command key for dictation.
+A user-configured single keyboard key selected by the Host and held by the Deck as USB HID while its Command Key is held, such as the right Command key for dictation.
 _Avoid_: Key chord, macro, executable hook
 
 **Device Protocol**:

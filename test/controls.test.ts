@@ -40,10 +40,20 @@ describe("reduceDeckMessage", () => {
     expect(press(changed.state, 10, fleet).effects).toEqual([]);
   });
 
-  test("maps configured Command Keys and ignores releases", () => {
+  test("maps configured Command Keys and holds Key Aliases until release", () => {
     const selected = { ...initialControlState, selectedPaneId: "p1" };
     expect(press(selected, 6, [agent(1)]).effects).toEqual([{ type: "newAgent" }]);
-    expect(press(selected, 8, [agent(1)]).effects).toEqual([{ type: "hid", key: "RIGHT_GUI" }]);
+    expect(press(selected, 8, [agent(1)]).effects).toEqual([
+      { type: "hid", key: "RIGHT_GUI", down: true },
+    ]);
+    expect(
+      reduceDeckMessage(
+        selected,
+        { t: "key", k: 8, down: false },
+        [agent(1)],
+        DEFAULT_CONFIG.commandKeys,
+      ).effects,
+    ).toEqual([{ type: "hid", key: "RIGHT_GUI", down: false }]);
     expect(press(selected, 9, [agent(1)]).effects).toEqual([
       { type: "sendKeys", paneId: "p1", keys: ["enter"] },
     ]);

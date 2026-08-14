@@ -32,6 +32,13 @@ state = "waiting"
 shown_text = None  # last 4 OLED lines, to skip ~200ms refreshes (spike outcome)
 
 
+def change_state(next_state):
+    global state
+    if state == "live" and next_state != "live":
+        kbd.release_all()  # Host disconnect mid-hold must not leave a modifier stuck.
+    state = next_state
+
+
 def send(obj):
     # Fire-and-forget: dropped while disconnected or on write timeout.
     try:
@@ -72,15 +79,14 @@ def hello():
 
 
 def handle(msg):
-    global state
     t = msg.get("t")
     if t == "hello":
         host_ver = msg.get("host")
         if host_ver is None or host_ver == VERSION:
-            state = "live"
+            change_state("live")
             hello()
         else:
-            state = "mismatch"
+            change_state("mismatch")
             show_mismatch(host_ver)
     elif state != "live":
         pass  # fail closed: no commands before a matching hello
@@ -92,8 +98,10 @@ def handle(msg):
     elif t == "hid":
         code = getattr(Keycode, msg.get("key", ""), None)
         if code is not None:
-            kbd.press(code)
-            kbd.release_all()
+            if msg.get("down"):
+                kbd.press(code)
+            else:
+                kbd.release(code)
 
 
 reader = LineReader()
@@ -105,12 +113,12 @@ hello()  # boot hello; dropped if no host yet, DTR edge below covers that
 while True:
     connected = serial.connected
     if connected and not was_connected:  # DTR rising edge: fresh session
-        state = "waiting"
+        change_state("waiting")
         reader = LineReader()
         show_waiting()
         hello()
     elif was_connected and not connected:
-        state = "waiting"
+        change_state("waiting")
         show_waiting()
     was_connected = connected
 

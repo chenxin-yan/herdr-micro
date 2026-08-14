@@ -19,7 +19,7 @@ export type HostMessage =
       readonly led: ReadonlyArray<readonly number[]>;
       readonly text: readonly string[];
     }
-  | { readonly t: "hid"; readonly key: string };
+  | { readonly t: "hid"; readonly key: string; readonly down: boolean };
 
 export class SerialError extends Data.TaggedError("SerialError")<{
   readonly message: string;

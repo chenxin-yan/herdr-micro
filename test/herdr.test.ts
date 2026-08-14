@@ -7,6 +7,7 @@ import { TestClock } from "effect/testing";
 
 import {
   connect,
+  createAgent,
   listWorkspaces,
   parseSnapshot,
   readUntil,
@@ -133,9 +134,9 @@ test("connect installs a lifetime error listener after connecting", async () => 
   }
 });
 
-test("sendRequest and listWorkspaces use one-shot Socket API requests", async () => {
+test("one-shot Socket API requests list Workspaces and focus a newly created agent", async () => {
   const path = `/tmp/herdr-micro-request-${process.pid}-${Date.now()}.sock`;
-  const methods: string[] = [];
+  const requests: Array<{ method: string; params: Record<string, unknown> }> = [];
   const server = createServer((socket) => {
     let buffer = "";
     socket.on("data", (chunk) => {
@@ -143,7 +144,7 @@ test("sendRequest and listWorkspaces use one-shot Socket API requests", async ()
       const newline = buffer.indexOf("\n");
       if (newline < 0) return;
       const request = JSON.parse(buffer.slice(0, newline));
-      methods.push(request.method);
+      requests.push(request);
       socket.write(
         `${JSON.stringify(
           request.method === "workspace.list"
@@ -153,7 +154,9 @@ test("sendRequest and listWorkspaces use one-shot Socket API requests", async ()
                   workspaces: [{ workspace_id: "w1", number: 1, label: "project", focused: true }],
                 },
               }
-            : { id: request.id, result: { type: "ok" } },
+            : request.method === "tab.create"
+              ? { id: request.id, result: { root_pane: { pane_id: "p2" } } }
+              : { id: request.id, result: { type: "ok" } },
         )}\n`,
       );
     });
@@ -167,7 +170,15 @@ test("sendRequest and listWorkspaces use one-shot Socket API requests", async ()
     expect(await Effect.runPromise(listWorkspaces(path))).toEqual([
       { id: "w1", number: 1, label: "project", focused: true },
     ]);
-    expect(methods).toEqual(["agent.focus", "workspace.list"]);
+    await Effect.runPromise(createAgent(path, "w1", "pi"));
+    expect(requests.map(({ method }) => method)).toEqual([
+      "agent.focus",
+      "workspace.list",
+      "tab.create",
+      "pane.send_input",
+    ]);
+    expect(requests[2]?.params).toEqual({ workspace_id: "w1", focus: true });
+    expect(requests[3]?.params).toEqual({ pane_id: "p2", text: "pi", keys: ["enter"] });
   } finally {
     await new Promise<void>((resolve) => server.close(() => resolve()));
     rmSync(path, { force: true });

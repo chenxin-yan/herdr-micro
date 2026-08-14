@@ -4,7 +4,7 @@ Status: approved (grilling session 2026-08-13/14)
 
 A physical control deck for a fleet of Herdr coding agents. Two components:
 
-- **Deck** — Adafruit MacroPad RP2040 running the herdr-micro Device Bundle (CircuitPython). Pure peripheral: reports raw key/encoder input, executes explicit output commands (Render Snapshots, HID key taps). No fleet logic or durable config (ADR-0001).
+- **Deck** — Adafruit MacroPad RP2040 running the herdr-micro Device Bundle (CircuitPython). Pure peripheral: reports raw key/encoder input, executes explicit output commands (Render Snapshots, HID key down/up). No fleet logic or durable config (ADR-0001).
 - **Host** — Bun + TypeScript + Effect v4 prerelease daemon on the Mac (ADR-0002). Owns Herdr integration, fleet projection, configuration, and all decisions.
 
 Terminology: see `CONTEXT.md`. Decisions: see `docs/adr/`.
@@ -28,14 +28,14 @@ Terminology: see `CONTEXT.md`. Decisions: see `docs/adr/`.
 
 Physical keys 7–12 are **Command Keys**, configured as logical 1–6:
 
-| Action      | Behavior                                                                                                                                           |
-| ----------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `newAgent`  | Create tab in focused Workspace, `pane run` the configured `defaultAgentCommand` (argv array) in its root pane; Herdr detection picks up the agent |
-| `nextPage`  | Cycle Agent Pages                                                                                                                                  |
-| `keyAlias`  | Host commands Deck to tap one configured HID key (e.g. `RIGHT_GUI` for dictation). Single key only — no chords/sequences                           |
-| `enter`     | `agent send-keys <selected> enter`                                                                                                                 |
-| `sendCtrlC` | `agent send-keys <selected> ctrl+c` — plain tap, no hold                                                                                           |
-| `none`      | Inert                                                                                                                                              |
+| Action      | Behavior                                                                                                                                                           |
+| ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `newAgent`  | Create and focus a tab in the focused Workspace, `pane run` the configured `defaultAgentCommand` (argv array) in its root pane; Herdr detection picks up the agent |
+| `nextPage`  | Cycle Agent Pages                                                                                                                                                  |
+| `keyAlias`  | Host commands Deck to hold one configured HID key (e.g. `RIGHT_GUI` for dictation) while the Command Key is held. Single key only — no chords/sequences            |
+| `enter`     | `agent send-keys <selected> enter`                                                                                                                                 |
+| `sendCtrlC` | `agent send-keys <selected> ctrl+c` — plain tap, no hold                                                                                                           |
+| `none`      | Inert                                                                                                                                                              |
 
 Encoder: rotate = cycle Workspaces with eager focus; press = jump to the next attention agent (`blocked` agents in Herdr order, then `done` agents in Herdr order), selecting it, flipping to its Agent Page, and focusing it in Herdr. Press cycles with wraparound and is a no-op when no agent needs attention.
 Agent Slot press: `agent focus` (changes Herdr shared focus; does not raise the macOS window — accepted for v1).
@@ -52,13 +52,13 @@ JSON Lines over dedicated `usb_cdc.data` (enabled in `boot.py` alongside console
 
 ```jsonc
 // Deck → Host
-{"t":"hello","fw":"0.0.1"}          // fw = Device Bundle app version
+{"t":"hello","fw":"0.0.2"}          // fw = Device Bundle app version
 {"t":"key","k":3,"down":true}        // k 0–11, 12 = encoder switch
 {"t":"encoder","delta":1}
 // Host → Deck
-{"t":"hello","host":"0.0.1"}        // host = Host app version
+{"t":"hello","host":"0.0.2"}        // host = Host app version
 {"t":"render","led":[[r,g,b]×12],"text":["l1","l2","l3","l4"]}
-{"t":"hid","key":"RIGHT_GUI"}
+{"t":"hid","key":"RIGHT_GUI","down":true}  // down=false releases the key
 ```
 
 Rules: the protocol itself is unversioned; instead both hellos carry the app version (single source: package.json, stamped onto the device by deploy) and an exact mismatch fails closed — Deck shows a redeploy-bundle screen, Host logs the mismatch (ADR-0003). A host-less hello (hand serial-terminal demo) omits `host` and is allowed. Complete last-write-wins renders, host queues at most one pending; inputs and HID fire-and-forget, dropped while disconnected, never replayed; 1 KiB frame cap, discard-to-newline resync; any unsolicited Deck `hello` (boot/reconnect) → Host pushes fresh render. Reconnect: VID/PID-filtered scan, bounded backoff (250 ms → 5 s), `hello`-probe distinguishes data port from console.
@@ -104,7 +104,7 @@ Missing/partial `commandKeys` → unbound keys are `none` (no implicit functiona
 1. **Spike A (hardware gate)**: `boot.py` with `usb_cdc.enable(console=True, data=True)` + HID keyboard on the MacroPad — confirm two `/dev/cu.usbmodem*` ports and HID coexistence; measure render frame parse/refresh cost.
 2. **Spike B (runtime gate)**: Bun + `serialport` (trustedDependencies) on pinned Bun/aarch64 — list/open/read/write/close + unplug/replug events. Fallback if it fails: Node runtime, same source.
 3. **Host core**: config schema, Herdr socket client (snapshot + subscribe), fleet projection, protocol codec — plain functions with tests; Effect layers for serial/socket/lifecycle.
-4. **Device Bundle**: input scan (keypad events), JSONL parse with bounded buffer, render, HID tap, waiting-for-host screen.
+4. **Device Bundle**: input scan (keypad events), JSONL parse with bounded buffer, render, HID key down/up, waiting-for-host screen.
 5. **End-to-end**: reconnect matrix (Deck unplug, Host restart, Herdr restart), then LaunchAgent + Nix packaging.
 
 Tunables left as calibration knobs (hardware truths, not spec): frame cap, backoff ceiling, LED animation timing, OLED refresh cadence.

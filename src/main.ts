@@ -118,7 +118,7 @@ const hostProgram = (config: Config) =>
               keys: effect.keys,
             }).pipe(Effect.asVoid);
           case "hid":
-            return deck.write({ t: "hid", key: effect.key });
+            return deck.write({ t: "hid", key: effect.key, down: effect.down });
           case "newAgent":
             return Effect.gen(function* () {
               const workspaces = yield* listWorkspaces(HERDR_SOCKET);

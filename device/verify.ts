@@ -116,9 +116,11 @@ check(
   "device alive after garbage (resync)",
 );
 
-log("== 4. hid tap: Deck types 'a' (focus doesn't matter for the check)");
-await write(fd, { t: "hid", key: "A" });
+log("== 4. hid hold: Deck holds 'a' for 300ms, then releases it (WATCH a text field)");
+await write(fd, { t: "hid", key: "A", down: true });
 await Bun.sleep(300);
+await write(fd, { t: "hid", key: "A", down: false });
+await Bun.sleep(100);
 
 log("== 5. app-version mismatch fails closed (WATCH: OLED shows 'version mismatch')");
 await write(fd, { t: "hello", host: "9.9.9" });

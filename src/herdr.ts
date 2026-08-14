@@ -300,7 +300,7 @@ export const createAgent = (
   Effect.gen(function* () {
     const created = yield* sendRequest(path, "tab.create", {
       workspace_id: workspaceId,
-      focus: false,
+      focus: true,
     });
     if (
       !isRecord(created) ||
