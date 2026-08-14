@@ -199,21 +199,6 @@ export function readUntil(
   });
 }
 
-const readSnapshotResponse = (socket: Socket) =>
-  readUntil(socket, (message) => isRecord(message) && message.id === "snapshot").pipe(
-    Effect.timeoutOrElse({
-      duration: HERDR_TIMEOUT,
-      orElse: () =>
-        Effect.fail(
-          new HerdrError({
-            message: `Herdr protocol error: timed out after ${HERDR_TIMEOUT} waiting for session.snapshot`,
-          }),
-        ),
-    }),
-  );
-const waitForSubscriptionEvent = (socket: Socket) =>
-  readUntil(socket, (message) => isRecord(message) && typeof message.event === "string");
-
 const withSocket = <A>(
   path: string,
   use: (socket: Socket) => Effect.Effect<A, HerdrError>,
@@ -253,6 +238,21 @@ export function sendRequest(
   );
 }
 
+const requestParsed = <A>(
+  path: string,
+  method: string,
+  parse: (response: unknown) => A,
+): Effect.Effect<A, HerdrError> =>
+  sendRequest(path, method, {}).pipe(
+    Effect.flatMap((response) =>
+      Effect.try({
+        try: () => parse(response),
+        catch: (cause) =>
+          cause instanceof HerdrError ? cause : new HerdrError({ message: String(cause) }),
+      }),
+    ),
+  );
+
 export interface Workspace {
   readonly id: string;
   readonly number: number;
@@ -260,7 +260,7 @@ export interface Workspace {
   readonly focused: boolean;
 }
 
-export function parseWorkspaceList(input: unknown): ReadonlyArray<Workspace> {
+function parseWorkspaceList(input: unknown): ReadonlyArray<Workspace> {
   if (!isRecord(input) || !isRecord(input.result) || !Array.isArray(input.result.workspaces)) {
     throw new HerdrError({ message: "Invalid workspace.list response" });
   }
@@ -282,15 +282,7 @@ export function parseWorkspaceList(input: unknown): ReadonlyArray<Workspace> {
 }
 
 export const listWorkspaces = (path: string): Effect.Effect<ReadonlyArray<Workspace>, HerdrError> =>
-  sendRequest(path, "workspace.list", {}).pipe(
-    Effect.flatMap((response) =>
-      Effect.try({
-        try: () => parseWorkspaceList(response),
-        catch: (cause) =>
-          cause instanceof HerdrError ? cause : new HerdrError({ message: String(cause) }),
-      }),
-    ),
-  );
+  requestParsed(path, "workspace.list", parseWorkspaceList);
 
 export const createAgent = (
   path: string,
@@ -317,23 +309,8 @@ export const createAgent = (
     });
   });
 
-function requestSnapshot(path: string): Effect.Effect<ReadonlyArray<Agent>, HerdrError> {
-  return withSocket(path, (socket) =>
-    Effect.gen(function* () {
-      yield* writeRequest(socket, {
-        id: "snapshot",
-        method: "session.snapshot",
-        params: {},
-      });
-      const response = yield* readSnapshotResponse(socket);
-      return yield* Effect.try({
-        try: () => parseSnapshot(response),
-        catch: (cause) =>
-          cause instanceof HerdrError ? cause : new HerdrError({ message: String(cause) }),
-      });
-    }),
-  );
-}
+const requestSnapshot = (path: string): Effect.Effect<ReadonlyArray<Agent>, HerdrError> =>
+  requestParsed(path, "session.snapshot", parseSnapshot);
 
 function refreshOnce(
   path: string,
@@ -369,7 +346,10 @@ function refreshOnce(
         if (current.length !== known.size || current.some(({ paneId }) => !known.has(paneId))) {
           return;
         }
-        yield* waitForSubscriptionEvent(subscription);
+        yield* readUntil(
+          subscription,
+          (message) => isRecord(message) && typeof message.event === "string",
+        );
       }),
     );
   });

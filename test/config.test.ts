@@ -1,4 +1,6 @@
 import { afterEach, describe, expect, test } from "bun:test";
+import { rmSync } from "node:fs";
+import { tmpdir } from "node:os";
 
 import { BunFileSystem } from "@effect/platform-bun";
 import { Effect } from "effect";
@@ -7,19 +9,15 @@ import { DEFAULT_CONFIG, loadConfig as loadConfigEffect } from "../src/config.ts
 
 const paths: string[] = [];
 const tempPath = () => {
-  const path = `${process.env.TMPDIR ?? "/tmp"}/herdr-micro-${crypto.randomUUID()}.json`;
+  const path = `${tmpdir()}/herdr-micro-${crypto.randomUUID()}.json`;
   paths.push(path);
   return path;
 };
 const loadConfig = (path: string) =>
   loadConfigEffect(path).pipe(Effect.provide(BunFileSystem.layer));
 
-afterEach(async () => {
-  await Promise.all(
-    paths.splice(0).map(async (path) => {
-      if (await Bun.file(path).exists()) await Bun.file(path).delete();
-    }),
-  );
+afterEach(() => {
+  for (const path of paths.splice(0)) rmSync(path, { force: true });
 });
 
 describe("loadConfig", () => {

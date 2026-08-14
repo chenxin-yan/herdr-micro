@@ -1,6 +1,6 @@
 import { closeSync, constants, openSync, readdirSync, readSync, writeSync } from "node:fs";
 
-import { Cause, Context, Data, Effect, Layer, Queue, Schedule, Stream } from "effect";
+import { Cause, Data, Effect, Queue, Schedule, Stream } from "effect";
 
 import { isRecord } from "./herdr.ts";
 
@@ -197,8 +197,6 @@ interface SerialPortApi extends DeckWriter {
   readonly messages: Stream.Stream<DeckMessage, SerialError>;
 }
 
-export class SerialPort extends Context.Service<SerialPort, SerialPortApi>()("SerialPort") {}
-
 const makeSerialPort = ({ fd, path, fw }: OpenDeck): SerialPortApi => {
   let writes = Promise.resolve();
   const write = (message: HostMessage) =>
@@ -233,18 +231,15 @@ const makeSerialPort = ({ fd, path, fw }: OpenDeck): SerialPortApi => {
   return { path, fw, write, messages };
 };
 
-export const SerialLive = Layer.effect(
-  SerialPort,
-  Effect.acquireRelease(discover, ({ fd }) =>
-    Effect.sync(() => {
-      try {
-        closeSync(fd);
-      } catch {
-        // USB unplug may invalidate the descriptor before scoped release.
-      }
-    }),
-  ).pipe(Effect.map(makeSerialPort)),
-);
+const acquireSerialPort = Effect.acquireRelease(discover, ({ fd }) =>
+  Effect.sync(() => {
+    try {
+      closeSync(fd);
+    } catch {
+      // USB unplug may invalidate the descriptor before scoped release.
+    }
+  }),
+).pipe(Effect.map(makeSerialPort));
 
 interface DeckHandlers {
   readonly connected: (deck: DeckWriter) => Effect.Effect<void, never>;
@@ -253,21 +248,24 @@ interface DeckHandlers {
 }
 
 const deckSession = (handlers: DeckHandlers) =>
-  Effect.gen(function* () {
-    const serial = yield* SerialPort;
-    yield* handlers.connected(serial);
-    yield* Stream.runForEach(serial.messages, (message) => handlers.message(serial, message)).pipe(
-      Effect.catchTag("SerialError", (error) =>
-        Effect.sync(() => console.error(`${error.message}; rescanning`)),
-      ),
-      Effect.ensuring(handlers.disconnected(serial)),
-    );
-  });
+  Effect.scoped(
+    Effect.gen(function* () {
+      const serial = yield* acquireSerialPort;
+      yield* handlers.connected(serial);
+      yield* Stream.runForEach(serial.messages, (message) =>
+        handlers.message(serial, message),
+      ).pipe(
+        Effect.catchTag("SerialError", (error) =>
+          Effect.sync(() => console.error(`${error.message}; rescanning`)),
+        ),
+        Effect.ensuring(handlers.disconnected(serial)),
+      );
+    }),
+  );
 
 export const watchDeck = (handlers: DeckHandlers): Effect.Effect<never, SerialError> =>
   Effect.forever(
     deckSession(handlers).pipe(
-      Effect.provide(SerialLive),
       Effect.tapError((error) =>
         Effect.sync(() => console.error(`${error.message}; reconnecting`)),
       ),

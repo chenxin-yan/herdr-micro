@@ -33,10 +33,7 @@ describe("buildRender", () => {
 
 test("LatestRenderQueue keeps only the newest pending Render Snapshot", async () => {
   const writes: RenderSnapshot[] = [];
-  let release!: () => void;
-  const first = new Promise<void>((resolve) => {
-    release = resolve;
-  });
+  const { promise: first, resolve: release } = Promise.withResolvers<void>();
   const queue = new LatestRenderQueue(
     async (snapshot) => {
       writes.push(snapshot);

@@ -26,20 +26,14 @@ const HERDR_SOCKET = `${homedir()}/.config/herdr/herdr.sock`;
 
 const herdrVersion = Effect.tryPromise({
   try: async (signal) => {
-    const child = Bun.spawn(["herdr", "--version"], { stdout: "pipe", stderr: "pipe" });
-    const abort = () => child.kill();
-    signal.addEventListener("abort", abort, { once: true });
-    try {
-      const [stdout, stderr, exitCode] = await Promise.all([
-        new Response(child.stdout).text(),
-        new Response(child.stderr).text(),
-        child.exited,
-      ]);
-      if (exitCode !== 0) throw new Error(stderr.trim() || `exit ${exitCode}`);
-      return stdout.trim();
-    } finally {
-      signal.removeEventListener("abort", abort);
-    }
+    const child = Bun.spawn(["herdr", "--version"], { stdout: "pipe", stderr: "pipe", signal });
+    const [stdout, stderr, exitCode] = await Promise.all([
+      new Response(child.stdout).text(),
+      new Response(child.stderr).text(),
+      child.exited,
+    ]);
+    if (exitCode !== 0) throw new Error(stderr.trim() || `exit ${exitCode}`);
+    return stdout.trim();
   },
   catch: (cause) => new Error(`Cannot run herdr --version: ${String(cause)}`),
 }).pipe(
@@ -170,15 +164,7 @@ const hostProgram = (config: Config) =>
           const active: ActiveDeck = { deck, renders, live: false };
           state.active = active;
           console.error(`Deck connected at ${deck.path}`);
-          yield* deck.write({ t: "hello", host: version }).pipe(Effect.catch(logFailure));
-          if (deck.fw === version) {
-            active.live = true;
-            enqueueRender();
-          } else {
-            console.error(
-              `Deck app version ${deck.fw} does not match host ${version}; redeploy the Device Bundle`,
-            );
-          }
+          yield* handleHello(active, deck.fw);
           yield* refreshWorkspaces.pipe(Effect.catch(logFailure));
         }),
       message: (deck: DeckWriter, message: DeckMessage): Effect.Effect<void, never> => {

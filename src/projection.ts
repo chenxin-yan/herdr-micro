@@ -9,7 +9,7 @@ export interface Agent {
   readonly tabId: string;
 }
 
-export interface FleetProjection {
+interface FleetProjection {
   readonly pageIndex: number;
   readonly pageNumber: number;
   readonly pageCount: number;

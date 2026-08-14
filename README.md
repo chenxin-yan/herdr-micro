@@ -38,5 +38,4 @@ Redeploying code-only changes needs no `--libs` and no reset:
 ```bash
 bun install
 bun dev                        # fleet console against the local Herdr session
-bun spikes/serial-fs-spike.ts  # hardware spike: render, HID tap, key/encoder echo
 ```

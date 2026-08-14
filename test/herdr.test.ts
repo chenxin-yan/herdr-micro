@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test";
+import { once } from "node:events";
 import { rmSync } from "node:fs";
 import { createServer, Socket } from "node:net";
 
@@ -68,7 +69,7 @@ const readWith = async (
   drive: (socket: Socket) => void,
 ) => {
   const exit = Effect.runPromiseExit(readUntil(socket, accept));
-  await new Promise((resolve) => setTimeout(resolve, 1));
+  await Bun.sleep(1);
   drive(socket);
   return exit;
 };
@@ -118,10 +119,7 @@ test("readUntil fails when the socket closes mid-read", async () => {
 test("connect installs a lifetime error listener after connecting", async () => {
   const path = `/tmp/herdr-micro-connect-${process.pid}-${Date.now()}.sock`;
   const server = createServer();
-  await new Promise<void>((resolve, reject) => {
-    server.once("error", reject);
-    server.listen(path, resolve);
-  });
+  await once(server.listen(path), "listening");
   const socket = await Effect.runPromise(connect(path));
   try {
     expect(socket.listenerCount("error")).toBeGreaterThan(0);
@@ -161,10 +159,7 @@ test("one-shot Socket API requests list Workspaces and focus a newly created age
       );
     });
   });
-  await new Promise<void>((resolve, reject) => {
-    server.once("error", reject);
-    server.listen(path, resolve);
-  });
+  await once(server.listen(path), "listening");
   try {
     await Effect.runPromise(sendRequest(path, "agent.focus", { target: "p1" }));
     expect(await Effect.runPromise(listWorkspaces(path))).toEqual([
@@ -189,14 +184,8 @@ test("watchFleet retries when Herdr stops answering snapshots", async () => {
   const path = `/tmp/herdr-micro-timeout-${process.pid}-${Date.now()}.sock`;
   const sockets = new Set<Socket>();
   let connections = 0;
-  let resolveFirst!: () => void;
-  let resolveSecond!: () => void;
-  const firstConnection = new Promise<void>((resolve) => {
-    resolveFirst = resolve;
-  });
-  const secondConnection = new Promise<void>((resolve) => {
-    resolveSecond = resolve;
-  });
+  const { promise: firstConnection, resolve: resolveFirst } = Promise.withResolvers<void>();
+  const { promise: secondConnection, resolve: resolveSecond } = Promise.withResolvers<void>();
   const server = createServer((socket) => {
     sockets.add(socket);
     socket.on("close", () => sockets.delete(socket));
@@ -204,10 +193,7 @@ test("watchFleet retries when Herdr stops answering snapshots", async () => {
     if (connections === 1) resolveFirst();
     if (connections === 2) resolveSecond();
   });
-  await new Promise<void>((resolve, reject) => {
-    server.once("error", reject);
-    server.listen(path, resolve);
-  });
+  await once(server.listen(path), "listening");
 
   const program = Effect.gen(function* () {
     yield* watchFleet(path, () => {}).pipe(Effect.forkChild);
@@ -238,11 +224,11 @@ test("watchFleet reconnects and reads a fresh snapshot", async () => {
   let subscribed = false;
   let refreshes = 0;
   const subscriptionTypes = new Set<string>();
-  const pendingSnapshots: Socket[] = [];
-  const respondWithSnapshot = (socket: Socket) =>
+  const pendingSnapshots: Array<() => void> = [];
+  const respondWithSnapshot = (socket: Socket, id: string) =>
     socket.write(
       `${JSON.stringify({
-        id: "snapshot",
+        id,
         result: {
           snapshot: {
             agents: [
@@ -273,8 +259,8 @@ test("watchFleet reconnects and reads a fresh snapshot", async () => {
         buffer = buffer.slice(newline + 1);
         if (request.method === "session.snapshot") {
           snapshotRequests += 1;
-          if (snapshotRequests % 2 === 1 || subscribed) respondWithSnapshot(socket);
-          else pendingSnapshots.push(socket);
+          if (snapshotRequests % 2 === 1 || subscribed) respondWithSnapshot(socket, request.id);
+          else pendingSnapshots.push(() => respondWithSnapshot(socket, request.id));
         } else if (request.method === "events.subscribe") {
           for (const subscription of request.params.subscriptions) {
             subscriptionTypes.add(subscription.type);
@@ -282,21 +268,15 @@ test("watchFleet reconnects and reads a fresh snapshot", async () => {
           subscriptions.add(socket);
           subscribed = true;
           socket.write('{"id":"events","result":{}}\n');
-          pendingSnapshots.splice(0).forEach(respondWithSnapshot);
+          pendingSnapshots.splice(0).forEach((respond) => respond());
         }
       }
     });
   });
-  await new Promise<void>((resolve, reject) => {
-    server.once("error", reject);
-    server.listen(path, resolve);
-  });
+  await once(server.listen(path), "listening");
 
   const fleets: Array<ReadonlyArray<{ readonly state: string }>> = [];
-  let resolveSecond!: () => void;
-  const secondFleet = new Promise<void>((resolve) => {
-    resolveSecond = resolve;
-  });
+  const { promise: secondFleet, resolve: resolveSecond } = Promise.withResolvers<void>();
   const fiber = Effect.runFork(
     watchFleet(
       path,

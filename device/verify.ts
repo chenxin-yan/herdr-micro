@@ -1,6 +1,5 @@
 // Ticket 03 acceptance driver: drives the Device Bundle over the data port.
 // Run: bun device/verify.ts   (watch the Deck's OLED/LEDs where prompted)
-// Transport duplicated from spikes/serial-fs-spike.ts; that file dies at ticket 04.
 import { closeSync, constants, openSync, readdirSync, readSync, writeSync } from "node:fs";
 
 import pkg from "../package.json";
@@ -77,11 +76,10 @@ const findDataPort = async (): Promise<[string, number]> => {
     const path = `/dev/${name}`;
     const fd = openPort(path);
     if (fd === null) continue;
-    // A fresh open raises DTR: the device may emit its own hello unprompted.
-    const hello = await waitFor(fd, (message) => message.t === "hello", 2000);
-    if (hello) return [path, fd];
+    // Send a hello and wait; the same read also catches the unsolicited
+    // DTR-edge hello (verified separately in step 6).
     await write(fd, { t: "hello" });
-    const reply = await waitFor(fd, (message) => message.t === "hello", 1500);
+    const reply = await waitFor(fd, (message) => message.t === "hello", 2000);
     if (reply) return [path, fd];
     closeSync(fd);
   }
