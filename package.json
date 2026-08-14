@@ -1,0 +1,29 @@
+{
+  "name": "herdr-micro",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "bun run src/main.ts",
+    "test": "bun test",
+    "check:types": "tsc --noEmit",
+    "lint": "oxlint",
+    "lint:fix": "oxlint --fix",
+    "fmt": "oxfmt --check",
+    "fmt:fix": "oxfmt",
+    "check": "bun run --parallel lint fmt check:types",
+    "check:fix": "bun run --sequential lint:fix fmt:fix",
+    "build": "bun run check:types && bun build ./src/main.ts --compile --minify --bytecode --format=esm --target=bun-darwin-arm64 --no-compile-autoload-dotenv --outfile ./dist/herdr-micro",
+    "start": "./dist/herdr-micro"
+  },
+  "dependencies": {
+    "@effect/platform-bun": "4.0.0-rc.108",
+    "effect": "4.0.0-rc.108"
+  },
+  "devDependencies": {
+    "@types/bun": "1.3.14",
+    "oxfmt": "^0.63.0",
+    "oxlint": "^1.78.0",
+    "typescript": "7.0.2"
+  }
+}
