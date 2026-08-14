@@ -52,16 +52,16 @@ JSON Lines over dedicated `usb_cdc.data` (enabled in `boot.py` alongside console
 
 ```jsonc
 // Deck → Host
-{"t":"hello","fw":"0.1.0"}
+{"t":"hello","fw":"0.0.1"}          // fw = Device Bundle app version
 {"t":"key","k":3,"down":true}        // k 0–11, 12 = encoder switch
 {"t":"encoder","delta":1}
 // Host → Deck
-{"t":"hello"}
+{"t":"hello","host":"0.0.1"}        // host = Host app version
 {"t":"render","led":[[r,g,b]×12],"text":["l1","l2","l3","l4"]}
 {"t":"hid","key":"RIGHT_GUI"}
 ```
 
-Rules: unversioned — Host and Device Bundle are assumed in sync (ADR-0003; revisit if they ship separately); complete last-write-wins renders, host queues at most one pending; inputs and HID fire-and-forget, dropped while disconnected, never replayed; 1 KiB frame cap, discard-to-newline resync; any unsolicited Deck `hello` (boot/reconnect) → Host pushes fresh render. Reconnect: VID/PID-filtered scan, bounded backoff (250 ms → 5 s), `hello`-probe distinguishes data port from console.
+Rules: the protocol itself is unversioned; instead both hellos carry the app version (single source: package.json, stamped onto the device by deploy) and an exact mismatch fails closed — Deck shows a redeploy-bundle screen, Host logs the mismatch (ADR-0003). A host-less hello (hand serial-terminal demo) omits `host` and is allowed. Complete last-write-wins renders, host queues at most one pending; inputs and HID fire-and-forget, dropped while disconnected, never replayed; 1 KiB frame cap, discard-to-newline resync; any unsolicited Deck `hello` (boot/reconnect) → Host pushes fresh render. Reconnect: VID/PID-filtered scan, bounded backoff (250 ms → 5 s), `hello`-probe distinguishes data port from console.
 
 ## Configuration
 

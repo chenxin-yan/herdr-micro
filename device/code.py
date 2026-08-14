@@ -7,10 +7,12 @@ import usb_hid
 from adafruit_hid.keyboard import Keyboard
 from adafruit_hid.keycode import Keycode
 from adafruit_macropad import MacroPad
-
 from protocol import LineReader
 
-FW = "0.0.1"
+try:
+    from version import VERSION  # stamped by deploy.sh from package.json
+except ImportError:
+    VERSION = "unknown"  # hand-copied without version.py: host will flag mismatch
 
 macropad = MacroPad()
 macropad.pixels.brightness = 0.2
@@ -23,8 +25,9 @@ serial.timeout = 0
 serial.write_timeout = 0  # never block the input scan on a slow/absent host
 
 # Session state, reset on every DTR rising edge:
-#   "waiting"  connected (or not), no host hello yet
-#   "live"     host hello received; render/hid accepted
+#   "waiting"   connected (or not), no host hello yet
+#   "live"      host hello received; render/hid accepted
+#   "mismatch"  host app version differs; fail closed until reconnect
 state = "waiting"
 shown_text = None  # last 4 OLED lines, to skip ~200ms refreshes (spike outcome)
 
@@ -49,21 +52,38 @@ def show(text):
 
 def show_waiting():
     macropad.pixels.fill((0, 0, 0))
-    show(["herdr-micro " + FW, "", "waiting for host", ""])
+    show(["herdr-micro " + VERSION, "", "waiting for host", ""])
+
+
+def show_mismatch(host_ver):
+    macropad.pixels.fill((0, 0, 0))
+    show(
+        [
+            "version mismatch",
+            "deck " + VERSION,
+            "host " + str(host_ver),
+            "redeploy bundle",
+        ]
+    )
 
 
 def hello():
-    send({"t": "hello", "fw": FW})
+    send({"t": "hello", "fw": VERSION})
 
 
 def handle(msg):
     global state
     t = msg.get("t")
     if t == "hello":
-        state = "live"
-        hello()
+        host_ver = msg.get("host")
+        if host_ver is None or host_ver == VERSION:
+            state = "live"
+            hello()
+        else:
+            state = "mismatch"
+            show_mismatch(host_ver)
     elif state != "live":
-        pass  # no commands before the host's hello
+        pass  # fail closed: no commands before a matching hello
     elif t == "render":
         led = msg.get("led", [])
         for i in range(min(12, len(led))):

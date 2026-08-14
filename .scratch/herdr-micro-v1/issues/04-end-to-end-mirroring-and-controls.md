@@ -10,6 +10,7 @@
 - [ ] All six configured Command Key actions and the encoder behave per the spec, driven by real key presses
 - [ ] Selected Agent rules hold: last slot pressed wins, page change clears, actions without selection are no-ops
 - [ ] Reconnect matrix passes: Deck unplug/replug, Host restart, and Herdr restart each recover to a correct fresh render with no replayed inputs
+- [ ] App-version mismatch (stale Device Bundle) fails closed: Deck shows the redeploy screen, Host logs the mismatch
 
 ## Comments
 

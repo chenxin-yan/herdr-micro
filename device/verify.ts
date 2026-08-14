@@ -2,6 +2,9 @@
 // Run: bun device/verify.ts   (watch the Deck's OLED/LEDs where prompted)
 // Transport duplicated from spikes/serial-fs-spike.ts; that file dies at ticket 04.
 import { closeSync, constants, openSync, readdirSync, readSync, writeSync } from "node:fs"
+import pkg from "../package.json"
+
+const VERSION = pkg.version
 
 const log = (...a: unknown[]) => console.log(new Date().toISOString().slice(11, 23), ...a)
 let failures = 0
@@ -85,12 +88,13 @@ const findDataPort = async (): Promise<[string, number]> => {
 	process.exit(1)
 }
 
-log("== 1. DTR-edge hello + handshake")
+log("== 1. DTR-edge hello + handshake (app version match)")
 const [path, fd] = await findDataPort()
 log(`data port: ${path}`)
-await write(fd, { t: "hello" })
+await write(fd, { t: "hello", host: VERSION })
 const helloReply = await waitFor(fd, (m) => m.t === "hello" && typeof m.fw === "string", 1500)
 check(helloReply !== null, `host hello answered (fw=${helloReply?.fw})`)
+check(helloReply?.fw === VERSION, `deck version ${helloReply?.fw} matches host ${VERSION}`)
 
 log("== 2. render (WATCH: LEDs green ramp, OLED shows RENDER OK)")
 await write(fd, {
@@ -105,14 +109,26 @@ await writeAll(fd, "this is not json\n")
 await writeAll(fd, "{" + "x".repeat(3000) + "\n") // > 1 KiB cap: discard-to-newline
 await writeAll(fd, '{"t":"key-with-no-newline') // partial frame left dangling
 await writeAll(fd, "\n")
-await write(fd, { t: "hello" })
+await write(fd, { t: "hello", host: VERSION })
 check((await waitFor(fd, (m) => m.t === "hello", 1500)) !== null, "device alive after garbage (resync)")
 
 log("== 4. hid tap: Deck types 'a' (focus doesn't matter for the check)")
 await write(fd, { t: "hid", key: "A" })
 await Bun.sleep(300)
 
-log("== 5. reconnect: close (DTR falls) -> reopen (DTR rises) -> fresh hello")
+log("== 5. app-version mismatch fails closed (WATCH: OLED shows 'version mismatch')")
+await write(fd, { t: "hello", host: "9.9.9" })
+await Bun.sleep(400)
+await write(fd, {
+	t: "render",
+	led: Array.from({ length: 12 }, () => [255, 0, 0]),
+	text: ["MUST NOT APPEAR", "", "", ""],
+})
+await Bun.sleep(600)
+log("  (if OLED shows MUST NOT APPEAR or LEDs went red, mismatch is NOT failing closed)")
+
+log("== 6. reconnect: close (DTR falls) -> reopen (DTR rises) -> fresh hello")
+
 closeSync(fd)
 await Bun.sleep(800)
 const fd2 = openPort(path)
@@ -121,7 +137,7 @@ if (fd2 === null) {
 } else {
 	const fresh = await waitFor(fd2, (m) => m.t === "hello", 3000)
 	check(fresh !== null, "unsolicited hello on DTR rising edge")
-	await write(fd2, { t: "hello" })
+	await write(fd2, { t: "hello", host: VERSION })
 	await waitFor(fd2, (m) => m.t === "hello", 1500)
 	await write(fd2, {
 		t: "render",

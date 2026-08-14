@@ -39,17 +39,23 @@ if [[ -n "$LIB_SRC" ]]; then
   done
 fi
 
+# Single source of truth for the app version: package.json, stamped onto the device.
+VERSION=$(sed -n 's/.*"version": "\(.*\)".*/\1/p' ../package.json | head -1)
+[[ -n "$VERSION" ]] || { echo "error: no version in package.json" >&2; exit 1; }
+printf 'VERSION = "%s"\n' "$VERSION" > "$DEST/version.py"
+
 cp boot.py "$DEST/boot.py"
 cp protocol.py "$DEST/protocol.py"
 cp code.py "$DEST/code.py"
 sync
-echo "copied boot.py + protocol.py + code.py"
+echo "copied boot.py + protocol.py + code.py (version $VERSION)"
 
 # Verify: files present, libs present.
 fail=0
 for f in boot.py protocol.py code.py; do
   cmp -s "$f" "$DEST/$f" || { echo "verify FAIL: $f differs on device" >&2; fail=1; }
 done
+grep -q "\"$VERSION\"" "$DEST/version.py" || { echo "verify FAIL: version.py" >&2; fail=1; }
 for lib in "${LIBS[@]}"; do
   [[ -e "$DEST/lib/$lib" ]] || { echo "verify FAIL: lib/$lib missing" >&2; fail=1; }
 done
