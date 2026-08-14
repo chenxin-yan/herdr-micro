@@ -4,11 +4,11 @@
 
 **Blocked by:** None — can start immediately.
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] `boot.py` enabling console + data CDC and HID keyboard is installed on the Deck; after reset, two `/dev/cu.usbmodem*` ports enumerate on macOS
-- [ ] A HID key tap (right Command) sent from device code is observed by macOS (e.g. triggers dictation or is visible in a key viewer)
-- [ ] Bun (pinned version, `serialport` via `trustedDependencies`) lists, opens, writes, and reads JSON Lines on the data port; the hello-probe distinguishes data port from console
-- [ ] Unplug/replug produces clean `close`/`error` events and a successful re-open; no zombie handles
-- [ ] Render-frame cost measured: max-size render (12 RGB + 4 text lines) parse + LED/OLED update time recorded, input scan stays responsive
-- [ ] Outcome recorded in the spec's tunables section (or a fallback decision documented: Node runtime / protocol adjustment)
+- [x] `boot.py` enabling console + data CDC and HID keyboard is installed on the Deck; after reset, two `/dev/cu.usbmodem*` ports enumerate on macOS
+- [x] A HID key tap (right Command) sent from device code is observed by macOS (e.g. triggers dictation or is visible in a key viewer) — verified by having the Deck type "a" into a focused text field (RIGHT_GUI alone has no visible effect)
+- [x] Bun (pinned version, `serialport` via `trustedDependencies`) lists, opens, writes, and reads JSON Lines on the data port; the hello-probe distinguishes data port from console — **protocol adjustment**: `serialport` crashes Bun 1.3.10 on open (bun#18546); replaced with `stty` + `node:fs` (see spec § Spike outcomes)
+- [x] Unplug/replug produces clean `close`/`error` events and a successful re-open; no zombie handles (`ENXIO` → rescan → re-probe, ~4 s)
+- [x] Render-frame cost measured: max-size render (12 RGB + 4 text lines) parse + LED/OLED update time recorded (~211 ms device, ~240 ms round-trip), input scan stays responsive
+- [x] Outcome recorded in the spec's tunables section (or a fallback decision documented: Node runtime / protocol adjustment)

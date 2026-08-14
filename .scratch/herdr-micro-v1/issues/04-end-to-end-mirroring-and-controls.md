@@ -11,3 +11,7 @@
 - [ ] Selected Agent rules hold: last slot pressed wins, page change clears, actions without selection are no-ops
 - [ ] Reconnect matrix passes: Deck unplug/replug, Host restart, and Herdr restart each recover to a correct fresh render with no replayed inputs
 - [ ] Version mismatch between Host and Device Bundle fails closed on both sides with the correct screens/logs
+
+## Comments
+
+- From ticket 02 review: the subscription socket has a window where no `'error'` listener is attached — a rare race crashes the process instead of triggering reconnect. Fix alongside the reconnect-matrix work here. Also missing: unit tests for `connect`/`readUntil` in `src/herdr.ts`.

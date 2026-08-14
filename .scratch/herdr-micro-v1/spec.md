@@ -108,3 +108,13 @@ Missing/partial `commandKeys` → unbound keys are `none` (no implicit functiona
 5. **End-to-end**: reconnect matrix (Deck unplug, Host restart, Herdr restart), then LaunchAgent + Nix packaging.
 
 Tunables left as calibration knobs (hardware truths, not spec): frame cap, backoff ceiling, LED animation timing, OLED refresh cadence.
+
+## Spike outcomes (ticket 01, measured on hardware)
+
+Board: MacroPad RP2040, CircuitPython 10.2.1, bundle 20260803. Host: macOS 14.7.1 arm64, Bun 1.3.10.
+
+- **Dual CDC + HID coexist**: `boot.py` with `usb_cdc.enable(console=True, data=True)` enumerates two `/dev/cu.usbmodem*` ports; HID keyboard stays functional alongside (taps observed in macOS; `AppleUserHIDEventDriver` attached).
+- **Protocol adjustment — no `serialport` addon**: `serialport@13` crashes Bun 1.3.10 on open (native addon calls `uv_default_loop`, unsupported — [bun#18546](https://github.com/oven-sh/bun/issues/18546); `list()` works, `open()` panics). Host transport is instead `stty -f <dev> raw -echo` + `node:fs` open (`O_RDWR|O_NOCTTY|O_NONBLOCK`) with a ~50Hz nonblocking `readSync` poll. Opening asserts DTR, so `usb_cdc.data.connected` sees the Host. Port discovery: glob `/dev/cu.usbmodem*` + hello-probe (no VID/PID metadata needed; probe alone distinguishes data from console port). Bun runtime retained; Node fallback not needed. Revisit `serialport` if bun#18546 lands.
+- **Render frame cost**: max-size render (272 B: 12 RGB + 4 text lines) ≈ **211 ms on-device** (dominated by OLED `display.refresh()`), ≈ 235–245 ms host round-trip. Key scan stays responsive immediately after. Consequence: render cadence must stay well under ~4 Hz, or ticket 03 should refresh the OLED only when text changes (LED-only renders are cheap).
+- **Unplug/replug**: host sees `ENXIO` on read → close, rescan, re-probe; recovery to fresh render in ~4 s. No zombie fds. Device soft-reboot (auto-reload) emits unsolicited `hello` on the still-open port, as the protocol expects.
+- Spike artifacts: `spikes/` (boot.py, code.py, deploy.sh, serial-fs-spike.ts); deploy + verify flow documented in README.
