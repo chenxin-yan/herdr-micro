@@ -52,16 +52,16 @@ JSON Lines over dedicated `usb_cdc.data` (enabled in `boot.py` alongside console
 
 ```jsonc
 // Deck → Host
-{"t":"hello","v":1,"fw":"0.1.0"}
+{"t":"hello","fw":"0.1.0"}
 {"t":"key","k":3,"down":true}        // k 0–11, 12 = encoder switch
 {"t":"encoder","delta":1}
 // Host → Deck
-{"t":"hello","v":1}
+{"t":"hello"}
 {"t":"render","led":[[r,g,b]×12],"text":["l1","l2","l3","l4"]}
 {"t":"hid","key":"RIGHT_GUI"}
 ```
 
-Rules: exact version match (mismatch → fail closed, Deck shows update screen); complete last-write-wins renders, host queues at most one pending; inputs and HID fire-and-forget, dropped while disconnected, never replayed; 1 KiB frame cap, discard-to-newline resync; any unsolicited Deck `hello` (boot/reconnect) → Host pushes fresh render. Reconnect: VID/PID-filtered scan, bounded backoff (250 ms → 5 s), `hello`-probe distinguishes data port from console.
+Rules: unversioned — Host and Device Bundle are assumed in sync (ADR-0003; revisit if they ship separately); complete last-write-wins renders, host queues at most one pending; inputs and HID fire-and-forget, dropped while disconnected, never replayed; 1 KiB frame cap, discard-to-newline resync; any unsolicited Deck `hello` (boot/reconnect) → Host pushes fresh render. Reconnect: VID/PID-filtered scan, bounded backoff (250 ms → 5 s), `hello`-probe distinguishes data port from console.
 
 ## Configuration
 

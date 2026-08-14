@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Deploy the spike Device Bundle to CIRCUITPY and verify.
-# Usage: spikes/deploy.sh [--libs <bundle-lib-dir>]
+# Deploy the Device Bundle to CIRCUITPY and verify.
+# Usage: device/deploy.sh [--libs <bundle-lib-dir>]
 #   --libs  path to an extracted Adafruit 10.x bundle's lib/ (skips lib copy if omitted
 #           and libs are already on the board)
 # After copy: press the Deck's reset button; the script waits for two data ports.
@@ -40,13 +40,14 @@ if [[ -n "$LIB_SRC" ]]; then
 fi
 
 cp boot.py "$DEST/boot.py"
+cp protocol.py "$DEST/protocol.py"
 cp code.py "$DEST/code.py"
 sync
-echo "copied boot.py + code.py"
+echo "copied boot.py + protocol.py + code.py"
 
 # Verify: files present, libs present.
 fail=0
-for f in boot.py code.py; do
+for f in boot.py protocol.py code.py; do
   cmp -s "$f" "$DEST/$f" || { echo "verify FAIL: $f differs on device" >&2; fail=1; }
 done
 for lib in "${LIBS[@]}"; do

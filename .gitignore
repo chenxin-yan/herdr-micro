@@ -35,3 +35,4 @@ logs
 
 # Finder (MacOS) folder config
 .DS_Store
+__pycache__/

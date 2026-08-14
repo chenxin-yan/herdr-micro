@@ -27,11 +27,11 @@ Copies libs (before `code.py`), byte-verifies, then waits for you to press
 reset and for both serial ports to enumerate:
 
 ```bash
-./spikes/deploy.sh --libs /tmp/adafruit-circuitpython-bundle-10.x-mpy-$TAG/lib
+./device/deploy.sh --libs /tmp/adafruit-circuitpython-bundle-10.x-mpy-$TAG/lib
 ```
 
 Redeploying code-only changes needs no `--libs` and no reset:
-`./spikes/deploy.sh`.
+`./device/deploy.sh`.
 
 ### 4. Run the Host
 

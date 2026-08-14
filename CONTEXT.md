@@ -53,7 +53,7 @@ A user-configured single keyboard key selected by the Host and tapped by the Dec
 _Avoid_: Key chord, macro, executable hook
 
 **Device Protocol**:
-The versioned, newline-delimited JSON messages exchanged between the Host and Deck over USB CDC data.
+The newline-delimited JSON messages exchanged between the Host and Deck over USB CDC data.
 _Avoid_: Herdr protocol, Socket API
 
 **Render Snapshot**:

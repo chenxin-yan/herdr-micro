@@ -5,6 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "bun run src/main.ts",
+    "device:deploy": "./device/deploy.sh",
+    "device:verify": "bun device/verify.ts",
     "test": "bun test",
     "check:types": "tsc --noEmit",
     "lint": "oxlint",
