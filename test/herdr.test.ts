@@ -5,7 +5,14 @@ import { createServer, Socket } from "node:net";
 import { Effect, Exit, Fiber } from "effect";
 import { TestClock } from "effect/testing";
 
-import { parseSnapshot, readUntil, watchFleet } from "../src/herdr.ts";
+import {
+  connect,
+  listWorkspaces,
+  parseSnapshot,
+  readUntil,
+  sendRequest,
+  watchFleet,
+} from "../src/herdr.ts";
 
 test("maps a session snapshot into the Fleet in Herdr order", () => {
   const fleet = parseSnapshot({
@@ -107,6 +114,66 @@ test("readUntil fails when the socket closes mid-read", async () => {
   expect(Exit.isFailure(exit)).toBe(true);
 });
 
+test("connect installs a lifetime error listener after connecting", async () => {
+  const path = `/tmp/herdr-micro-connect-${process.pid}-${Date.now()}.sock`;
+  const server = createServer();
+  await new Promise<void>((resolve, reject) => {
+    server.once("error", reject);
+    server.listen(path, resolve);
+  });
+  const socket = await Effect.runPromise(connect(path));
+  try {
+    expect(socket.listenerCount("error")).toBeGreaterThan(0);
+    socket.emit("error", new Error("between reads"));
+    expect(socket.destroyed).toBe(true);
+  } finally {
+    socket.destroy();
+    await new Promise<void>((resolve) => server.close(() => resolve()));
+    rmSync(path, { force: true });
+  }
+});
+
+test("sendRequest and listWorkspaces use one-shot Socket API requests", async () => {
+  const path = `/tmp/herdr-micro-request-${process.pid}-${Date.now()}.sock`;
+  const methods: string[] = [];
+  const server = createServer((socket) => {
+    let buffer = "";
+    socket.on("data", (chunk) => {
+      buffer += chunk.toString("utf8");
+      const newline = buffer.indexOf("\n");
+      if (newline < 0) return;
+      const request = JSON.parse(buffer.slice(0, newline));
+      methods.push(request.method);
+      socket.write(
+        `${JSON.stringify(
+          request.method === "workspace.list"
+            ? {
+                id: request.id,
+                result: {
+                  workspaces: [{ workspace_id: "w1", number: 1, label: "project", focused: true }],
+                },
+              }
+            : { id: request.id, result: { type: "ok" } },
+        )}\n`,
+      );
+    });
+  });
+  await new Promise<void>((resolve, reject) => {
+    server.once("error", reject);
+    server.listen(path, resolve);
+  });
+  try {
+    await Effect.runPromise(sendRequest(path, "agent.focus", { target: "p1" }));
+    expect(await Effect.runPromise(listWorkspaces(path))).toEqual([
+      { id: "w1", number: 1, label: "project", focused: true },
+    ]);
+    expect(methods).toEqual(["agent.focus", "workspace.list"]);
+  } finally {
+    await new Promise<void>((resolve) => server.close(() => resolve()));
+    rmSync(path, { force: true });
+  }
+});
+
 test("watchFleet retries when Herdr stops answering snapshots", async () => {
   const path = `/tmp/herdr-micro-timeout-${process.pid}-${Date.now()}.sock`;
   const sockets = new Set<Socket>();
@@ -158,6 +225,8 @@ test("watchFleet reconnects and reads a fresh snapshot", async () => {
   let snapshotRequests = 0;
   let status = "working";
   let subscribed = false;
+  let refreshes = 0;
+  const subscriptionTypes = new Set<string>();
   const pendingSnapshots: Socket[] = [];
   const respondWithSnapshot = (socket: Socket) =>
     socket.write(
@@ -196,6 +265,9 @@ test("watchFleet reconnects and reads a fresh snapshot", async () => {
           if (snapshotRequests % 2 === 1 || subscribed) respondWithSnapshot(socket);
           else pendingSnapshots.push(socket);
         } else if (request.method === "events.subscribe") {
+          for (const subscription of request.params.subscriptions) {
+            subscriptionTypes.add(subscription.type);
+          }
           subscriptions.add(socket);
           subscribed = true;
           socket.write('{"id":"events","result":{}}\n');
@@ -215,21 +287,30 @@ test("watchFleet reconnects and reads a fresh snapshot", async () => {
     resolveSecond = resolve;
   });
   const fiber = Effect.runFork(
-    watchFleet(path, (fleet) => {
-      fleets.push(fleet);
-      if (fleets.length === 1) {
-        status = "done";
-        subscriptions.forEach((socket) => socket.destroy());
-      } else {
-        resolveSecond();
-      }
-    }),
+    watchFleet(
+      path,
+      (fleet) => {
+        fleets.push(fleet);
+        if (fleets.length === 1) {
+          status = "done";
+          subscriptions.forEach((socket) => socket.destroy());
+        } else {
+          resolveSecond();
+        }
+      },
+      () =>
+        Effect.sync(() => {
+          refreshes += 1;
+        }),
+    ),
   );
   const timer = setTimeout(() => resolveSecond(), 3_000);
 
   try {
     await secondFleet;
     expect(fleets.map(([agent]) => agent?.state)).toEqual(["working", "done"]);
+    expect(subscriptionTypes).toContain("workspace.focused");
+    expect(refreshes).toBeGreaterThanOrEqual(2);
   } finally {
     clearTimeout(timer);
     await Effect.runPromise(Fiber.interrupt(fiber));

@@ -6,11 +6,23 @@ import { Effect } from "effect";
 import { Command, Flag } from "effect/unstable/cli";
 
 import { version } from "../package.json";
-import { loadConfig } from "./config.ts";
-import { renderConsole } from "./console.ts";
-import { watchFleet } from "./herdr.ts";
+import { loadConfig, type Config } from "./config.ts";
+import {
+  cycleWorkspace,
+  initialControlState,
+  reconcileControls,
+  reduceDeckMessage,
+  shellCommand,
+  type ControlEffect,
+  type ControlState,
+} from "./controls.ts";
+import { createAgent, listWorkspaces, sendRequest, watchFleet, type Workspace } from "./herdr.ts";
+import type { Agent } from "./projection.ts";
+import { buildRender, LatestRenderQueue } from "./render.ts";
+import { watchDeck, type DeckMessage, type DeckWriter } from "./serial.ts";
 
 const HERDR_VERSION_TIMEOUT = "5 seconds";
+const HERDR_SOCKET = `${homedir()}/.config/herdr/herdr.sock`;
 
 const herdrVersion = Effect.tryPromise({
   try: async (signal) => {
@@ -40,6 +52,174 @@ const herdrVersion = Effect.tryPromise({
   }),
 );
 
+interface ActiveDeck {
+  readonly deck: DeckWriter;
+  readonly renders: LatestRenderQueue;
+  live: boolean;
+}
+
+interface AppState {
+  fleet: ReadonlyArray<Agent>;
+  controls: ControlState;
+  workspaces: ReadonlyArray<Workspace>;
+  active: ActiveDeck | undefined;
+}
+
+const logFailure = (cause: { readonly message: string }) =>
+  Effect.sync(() => console.error(cause.message));
+
+const hostProgram = (config: Config) =>
+  Effect.gen(function* () {
+    const state: AppState = {
+      fleet: [],
+      controls: initialControlState,
+      workspaces: [],
+      active: undefined,
+    };
+
+    const enqueueRender = () => {
+      if (!state.active?.live) return;
+      const currentWorkspace = state.workspaces.find(({ id }) => id === state.controls.workspaceId);
+      state.active.renders.enqueue(
+        buildRender(
+          state.fleet,
+          state.controls.pageIndex,
+          state.controls.selectedPaneId,
+          currentWorkspace?.label ?? currentWorkspace?.id,
+          config,
+        ),
+      );
+    };
+
+    const refreshWorkspaces = listWorkspaces(HERDR_SOCKET).pipe(
+      Effect.tap((workspaces) =>
+        Effect.sync(() => {
+          state.workspaces = workspaces;
+          const currentWorkspace = workspaces.find((workspace) => workspace.focused);
+          if (currentWorkspace) {
+            state.controls = { ...state.controls, workspaceId: currentWorkspace.id };
+          }
+          enqueueRender();
+        }),
+      ),
+    );
+
+    const execute = (effect: ControlEffect, deck: DeckWriter): Effect.Effect<void, never> => {
+      const operation = (() => {
+        switch (effect.type) {
+          case "focusAgent":
+          case "jumpToAttention":
+            return sendRequest(HERDR_SOCKET, "agent.focus", { target: effect.paneId }).pipe(
+              Effect.asVoid,
+            );
+          case "sendKeys":
+            return sendRequest(HERDR_SOCKET, "agent.send_keys", {
+              target: effect.paneId,
+              keys: effect.keys,
+            }).pipe(Effect.asVoid);
+          case "hid":
+            return deck.write({ t: "hid", key: effect.key });
+          case "newAgent":
+            return Effect.gen(function* () {
+              const workspaces = yield* listWorkspaces(HERDR_SOCKET);
+              const currentWorkspace = workspaces.find((workspace) => workspace.focused);
+              if (!currentWorkspace) return;
+              yield* createAgent(
+                HERDR_SOCKET,
+                currentWorkspace.id,
+                shellCommand(config.defaultAgentCommand),
+              );
+            });
+          case "selectWorkspace":
+            return Effect.gen(function* () {
+              const workspaces = yield* listWorkspaces(HERDR_SOCKET);
+              const target = cycleWorkspace(workspaces, state.controls.workspaceId, effect.delta);
+              if (!target) return;
+              state.workspaces = workspaces;
+              state.controls = { ...state.controls, workspaceId: target.id };
+              enqueueRender();
+              yield* sendRequest(HERDR_SOCKET, "workspace.focus", {
+                workspace_id: target.id,
+              });
+            });
+        }
+      })();
+      return operation.pipe(Effect.catch(logFailure));
+    };
+
+    const handleHello = (active: ActiveDeck, fw: string): Effect.Effect<void, never> => {
+      active.live = fw === version;
+      if (!active.live) {
+        console.error(
+          `Deck app version ${fw} does not match host ${version}; redeploy the Device Bundle`,
+        );
+      }
+      return active.deck.write({ t: "hello", host: version }).pipe(
+        Effect.tap(() => Effect.sync(enqueueRender)),
+        Effect.catch(logFailure),
+      );
+    };
+
+    const handlers = {
+      connected: (deck: DeckWriter): Effect.Effect<void, never> =>
+        Effect.gen(function* () {
+          const renders = new LatestRenderQueue(
+            (snapshot) => Effect.runPromise(deck.write(snapshot)),
+            (cause) => console.error(`Deck render failed: ${String(cause)}`),
+          );
+          const active: ActiveDeck = { deck, renders, live: false };
+          state.active = active;
+          console.error(`Deck connected at ${deck.path}`);
+          yield* deck.write({ t: "hello", host: version }).pipe(Effect.catch(logFailure));
+          if (deck.fw === version) {
+            active.live = true;
+            enqueueRender();
+          } else {
+            console.error(
+              `Deck app version ${deck.fw} does not match host ${version}; redeploy the Device Bundle`,
+            );
+          }
+          yield* refreshWorkspaces.pipe(Effect.catch(logFailure));
+        }),
+      message: (deck: DeckWriter, message: DeckMessage): Effect.Effect<void, never> => {
+        const active = state.active;
+        if (!active || active.deck !== deck) return Effect.void;
+        if (message.t === "hello") return handleHello(active, message.fw);
+        if (!active.live) return Effect.void;
+
+        const reduced = reduceDeckMessage(state.controls, message, state.fleet, config.commandKeys);
+        state.controls = reduced.state;
+        enqueueRender();
+        return Effect.forEach(reduced.effects, (effect) => execute(effect, deck), {
+          discard: true,
+        });
+      },
+      disconnected: (deck: DeckWriter): Effect.Effect<void, never> =>
+        Effect.sync(() => {
+          if (state.active?.deck !== deck) return;
+          state.active.renders.clear();
+          state.active = undefined;
+          console.error("Deck disconnected");
+        }),
+    };
+
+    yield* Effect.all(
+      [
+        watchFleet(
+          HERDR_SOCKET,
+          (fleet) => {
+            state.fleet = fleet;
+            state.controls = reconcileControls(state.controls, fleet);
+            enqueueRender();
+          },
+          () => refreshWorkspaces,
+        ),
+        watchDeck(handlers),
+      ],
+      { concurrency: "unbounded", discard: true },
+    );
+  });
+
 const command = Command.make(
   "herdr-micro",
   {
@@ -50,12 +230,10 @@ const command = Command.make(
   },
   ({ config }) =>
     Effect.gen(function* () {
-      yield* loadConfig(config);
+      const loaded = yield* loadConfig(config);
       const herdr = yield* herdrVersion;
       yield* Effect.sync(() => console.error(`herdr-micro: ${herdr}`));
-      yield* watchFleet(`${homedir()}/.config/herdr/herdr.sock`, (fleet) => {
-        console.log(`${renderConsole(fleet)}\n`);
-      });
+      yield* hostProgram(loaded);
     }).pipe(
       Effect.catch((error) =>
         Effect.sync(() => {

@@ -10,6 +10,7 @@ const HERDR_TIMEOUT = "5 seconds";
 const STRUCTURAL_SUBSCRIPTIONS = [
   "workspace.created",
   "workspace.closed",
+  "workspace.focused",
   "workspace.moved",
   "workspace.reordered",
   "tab.created",
@@ -28,7 +29,7 @@ export class HerdrError extends Data.TaggedError("HerdrError")<{
   readonly message: string;
 }> {}
 
-const isRecord = (value: unknown): value is Record<string, unknown> =>
+export const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null;
 
 export function parseSnapshot(input: unknown): ReadonlyArray<Agent> {
@@ -68,7 +69,7 @@ export function parseSnapshot(input: unknown): ReadonlyArray<Agent> {
   });
 }
 
-function connect(path: string): Effect.Effect<Socket, HerdrError> {
+export function connect(path: string): Effect.Effect<Socket, HerdrError> {
   return Effect.callback<Socket, HerdrError>((resume) => {
     let socket: Socket;
     try {
@@ -228,6 +229,94 @@ const writeRequest = (socket: Socket, request: unknown) =>
     socket.write(`${JSON.stringify(request)}\n`);
   });
 
+export function sendRequest(
+  path: string,
+  method: string,
+  params: Readonly<Record<string, unknown>>,
+): Effect.Effect<unknown, HerdrError> {
+  const id = crypto.randomUUID();
+  return withSocket(path, (socket) =>
+    Effect.gen(function* () {
+      yield* writeRequest(socket, { id, method, params });
+      return yield* readUntil(socket, (message) => isRecord(message) && message.id === id).pipe(
+        Effect.timeoutOrElse({
+          duration: HERDR_TIMEOUT,
+          orElse: () =>
+            Effect.fail(
+              new HerdrError({
+                message: `Herdr protocol error: timed out after ${HERDR_TIMEOUT} waiting for ${method}`,
+              }),
+            ),
+        }),
+      );
+    }),
+  );
+}
+
+export interface Workspace {
+  readonly id: string;
+  readonly number: number;
+  readonly label: string;
+  readonly focused: boolean;
+}
+
+export function parseWorkspaceList(input: unknown): ReadonlyArray<Workspace> {
+  if (!isRecord(input) || !isRecord(input.result) || !Array.isArray(input.result.workspaces)) {
+    throw new HerdrError({ message: "Invalid workspace.list response" });
+  }
+  return input.result.workspaces.map((value) => {
+    if (
+      !isRecord(value) ||
+      typeof value.workspace_id !== "string" ||
+      typeof value.number !== "number"
+    ) {
+      throw new HerdrError({ message: "Invalid workspace in workspace.list response" });
+    }
+    return {
+      id: value.workspace_id,
+      number: value.number,
+      label: typeof value.label === "string" ? value.label : value.workspace_id,
+      focused: value.focused === true,
+    };
+  });
+}
+
+export const listWorkspaces = (path: string): Effect.Effect<ReadonlyArray<Workspace>, HerdrError> =>
+  sendRequest(path, "workspace.list", {}).pipe(
+    Effect.flatMap((response) =>
+      Effect.try({
+        try: () => parseWorkspaceList(response),
+        catch: (cause) =>
+          cause instanceof HerdrError ? cause : new HerdrError({ message: String(cause) }),
+      }),
+    ),
+  );
+
+export const createAgent = (
+  path: string,
+  workspaceId: string,
+  command: string,
+): Effect.Effect<void, HerdrError> =>
+  Effect.gen(function* () {
+    const created = yield* sendRequest(path, "tab.create", {
+      workspace_id: workspaceId,
+      focus: false,
+    });
+    if (
+      !isRecord(created) ||
+      !isRecord(created.result) ||
+      !isRecord(created.result.root_pane) ||
+      typeof created.result.root_pane.pane_id !== "string"
+    ) {
+      return yield* Effect.fail(new HerdrError({ message: "Invalid tab.create response" }));
+    }
+    yield* sendRequest(path, "pane.send_input", {
+      pane_id: created.result.root_pane.pane_id,
+      text: command,
+      keys: ["enter"],
+    });
+  });
+
 function requestSnapshot(path: string): Effect.Effect<ReadonlyArray<Agent>, HerdrError> {
   return withSocket(path, (socket) =>
     Effect.gen(function* () {
@@ -249,6 +338,7 @@ function requestSnapshot(path: string): Effect.Effect<ReadonlyArray<Agent>, Herd
 function refreshOnce(
   path: string,
   onFleet: (fleet: ReadonlyArray<Agent>) => void,
+  onRefresh: () => Effect.Effect<void, HerdrError>,
 ): Effect.Effect<void, HerdrError> {
   return Effect.gen(function* () {
     // Full teardown + resubscribe per event so panes created since the last
@@ -271,6 +361,7 @@ function refreshOnce(
         });
         const current = yield* requestSnapshot(path);
         yield* Effect.sync(() => onFleet(current));
+        yield* onRefresh();
         // Panes created between the two snapshots have no agent_status
         // subscription yet; resubscribe immediately instead of waiting on a
         // socket that may never report them.
@@ -287,6 +378,7 @@ function refreshOnce(
 export const watchFleet = (
   path: string,
   onFleet: (fleet: ReadonlyArray<Agent>) => void,
+  onRefresh: () => Effect.Effect<void, HerdrError> = () => Effect.void,
 ): Effect.Effect<never, HerdrError> => {
   let previous = "";
   const emitChange = (fleet: ReadonlyArray<Agent>) => {
@@ -299,7 +391,7 @@ export const watchFleet = (
   // arrived) restarts the backoff at 250 ms instead of accumulating toward
   // the 5 s cap over the daemon's lifetime.
   return Effect.forever(
-    refreshOnce(path, emitChange).pipe(
+    refreshOnce(path, emitChange, onRefresh).pipe(
       Effect.tapError((error) =>
         Effect.sync(() => console.error(`${error.message}; reconnecting`)),
       ),

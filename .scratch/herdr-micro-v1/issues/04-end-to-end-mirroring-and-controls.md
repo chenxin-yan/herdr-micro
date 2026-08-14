@@ -15,3 +15,4 @@
 ## Comments
 
 - From ticket 02 review: the subscription socket has a window where no `'error'` listener is attached — a rare race crashes the process instead of triggering reconnect. Fix alongside the reconnect-matrix work here. Also missing: unit tests for `connect`/`readUntil` in `src/herdr.ts`.
+- 2026-08-14: User approved changing encoder press from re-focusing the current Workspace to jumping to the next attention agent: `blocked` agents first, then `done`, preserving Herdr order within each state. The jump selects and focuses the agent, flips to its Agent Page, wraps, and is a no-op when none need attention. Encoder rotation retains eager Workspace focus.

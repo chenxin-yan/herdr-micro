@@ -37,7 +37,7 @@ Physical keys 7–12 are **Command Keys**, configured as logical 1–6:
 | `sendCtrlC` | `agent send-keys <selected> ctrl+c` — plain tap, no hold                                                                                           |
 | `none`      | Inert                                                                                                                                              |
 
-Encoder: rotate = cycle Workspaces; press = focus selected Workspace.
+Encoder: rotate = cycle Workspaces with eager focus; press = jump to the next attention agent (`blocked` agents in Herdr order, then `done` agents in Herdr order), selecting it, flipping to its Agent Page, and focusing it in Herdr. Press cycles with wraparound and is a no-op when no agent needs attention.
 Agent Slot press: `agent focus` (changes Herdr shared focus; does not raise the macOS window — accepted for v1).
 
 Dropped from v1: close tab, dictation-as-host-emitted-chord (rejected: macOS Accessibility churn), overflow beyond paging, transcript on OLED.
