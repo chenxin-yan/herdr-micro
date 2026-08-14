@@ -20,7 +20,7 @@ Terminology: see `CONTEXT.md`. Decisions: see `docs/adr/`.
 
 - Fleet = agents reported by Herdr, in Herdr's order. Herdr is the sole source of truth; no state duplicated on Deck or Host beyond the current projection.
 - Six **Agent Slots** (physical keys 1–6), paged. **Agent Pages** of six; agents shift left when one exits.
-- **Page Key** cycles pages (wraps). Its LED shows highest-priority state among *off-page* agents.
+- **Page Key** cycles pages (wraps). Its LED shows highest-priority state among _off-page_ agents.
 - **Selected Agent** = last Agent Slot pressed. Cleared on page change. Agent commands (Enter, Send Ctrl-C) target it; ignored when none selected.
 - State priority: `blocked > done > working > unknown > idle` (Herdr's five semantic states; presentation only).
 
@@ -28,14 +28,14 @@ Terminology: see `CONTEXT.md`. Decisions: see `docs/adr/`.
 
 Physical keys 7–12 are **Command Keys**, configured as logical 1–6:
 
-| Action | Behavior |
-|---|---|
-| `newAgent` | Create tab in focused Workspace, `pane run` the configured `defaultAgentCommand` (argv array) in its root pane; Herdr detection picks up the agent |
-| `nextPage` | Cycle Agent Pages |
-| `keyAlias` | Host commands Deck to tap one configured HID key (e.g. `RIGHT_GUI` for dictation). Single key only — no chords/sequences |
-| `enter` | `agent send-keys <selected> enter` |
-| `sendCtrlC` | `agent send-keys <selected> ctrl+c` — plain tap, no hold |
-| `none` | Inert |
+| Action      | Behavior                                                                                                                                           |
+| ----------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `newAgent`  | Create tab in focused Workspace, `pane run` the configured `defaultAgentCommand` (argv array) in its root pane; Herdr detection picks up the agent |
+| `nextPage`  | Cycle Agent Pages                                                                                                                                  |
+| `keyAlias`  | Host commands Deck to tap one configured HID key (e.g. `RIGHT_GUI` for dictation). Single key only — no chords/sequences                           |
+| `enter`     | `agent send-keys <selected> enter`                                                                                                                 |
+| `sendCtrlC` | `agent send-keys <selected> ctrl+c` — plain tap, no hold                                                                                           |
+| `none`      | Inert                                                                                                                                              |
 
 Encoder: rotate = cycle Workspaces; press = focus selected Workspace.
 Agent Slot press: `agent focus` (changes Herdr shared focus; does not raise the macOS window — accepted for v1).
@@ -65,11 +65,10 @@ Rules: exact version match (mismatch → fail closed, Deck shows update screen);
 
 ## Configuration
 
-`~/.config/herdr-micro/config.json`, overridable via `--config PATH`. Missing file = defaults; invalid file = exact schema error, exit nonzero. One versioned JSON schema shared by manual and Nix installs.
+`~/.config/herdr-micro/config.json`, overridable via `--config PATH`. Missing file = defaults; in a provided file every field is optional with field-level defaults (keys omitted from `commandKeys` default to `none`, not the built-in bindings); invalid values = exact schema error, exit nonzero. One JSON schema shared by manual and Nix installs.
 
 ```json
 {
-  "schemaVersion": 1,
   "defaultAgentCommand": ["pi"],
   "commandKeys": {
     "1": { "type": "newAgent" },
@@ -82,8 +81,11 @@ Rules: exact version match (mismatch → fail closed, Deck shows update screen);
   "appearance": {
     "brightness": 0.2,
     "states": {
-      "blocked": "#ff0000", "done": "#00ff00", "working": "#0000ff",
-      "idle": "#ffffff", "unknown": "#8000ff"
+      "blocked": "#ff0000",
+      "done": "#00ff00",
+      "working": "#0000ff",
+      "idle": "#ffffff",
+      "unknown": "#8000ff"
     }
   }
 }
