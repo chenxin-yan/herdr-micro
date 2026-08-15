@@ -64,10 +64,16 @@ describe("reduceControlMessage", () => {
     ]);
   });
 
-  test("ignores selected-agent actions without a selection", () => {
-    expect(press(initialControlState, 8, [agent(1)]).effects).toEqual([]);
-    expect(press(initialControlState, 10, [agent(1)]).effects).toEqual([]);
-    expect(press(initialControlState, 11, [agent(1)]).effects).toEqual([]);
+  test("logs selected-agent actions without a selection instead of acting", () => {
+    expect(press(initialControlState, 8, [agent(1)]).effects).toEqual([
+      { type: "log", message: "esc ignored: no agent selected" },
+    ]);
+    expect(press(initialControlState, 10, [agent(1)]).effects).toEqual([
+      { type: "log", message: "enter ignored: no agent selected" },
+    ]);
+    expect(press(initialControlState, 11, [agent(1)]).effects).toEqual([
+      { type: "log", message: "ctrl+c ignored: no agent selected" },
+    ]);
   });
 
   test("flips encoder direction in Workspace mode", () => {

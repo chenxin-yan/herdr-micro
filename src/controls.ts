@@ -21,7 +21,8 @@ export type ControlEffect =
   | { readonly type: "hid"; readonly key: string; readonly down: boolean }
   | { readonly type: "selectWorkspace"; readonly delta: number }
   | { readonly type: "enterTabMode" }
-  | { readonly type: "selectTab"; readonly delta: number };
+  | { readonly type: "selectTab"; readonly delta: number }
+  | { readonly type: "log"; readonly message: string };
 
 export const initialControlState: ControlState = {
   pageIndex: 0,
@@ -47,7 +48,10 @@ const sendSelected = (
   state: ControlState,
   keys: readonly string[],
 ): ReadonlyArray<ControlEffect> =>
-  state.selectedPaneId ? [{ type: "sendKeys", paneId: state.selectedPaneId, keys }] : [];
+  state.selectedPaneId
+    ? [{ type: "sendKeys", paneId: state.selectedPaneId, keys }]
+    : // Dropped actions were invisible at the desk and got reported as "key does nothing".
+      [{ type: "log", message: `${keys.join("+")} ignored: no agent selected` }];
 
 export function reduceControlMessage(
   state: ControlState,

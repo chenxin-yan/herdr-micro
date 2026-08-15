@@ -224,6 +224,8 @@ const hostProgram = (config: Config) =>
               enqueueRender();
               yield* sendRequest(HERDR_SOCKET, "tab.focus", { tab_id: target.id });
             });
+          case "log":
+            return Effect.sync(() => console.error(effect.message));
         }
       })();
       return operation.pipe(Effect.catch(logFailure));
