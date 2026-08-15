@@ -242,8 +242,9 @@ const requestParsed = <A>(
   path: string,
   method: string,
   parse: (response: unknown) => A,
+  params: Readonly<Record<string, unknown>> = {},
 ): Effect.Effect<A, HerdrError> =>
-  sendRequest(path, method, {}).pipe(
+  sendRequest(path, method, params).pipe(
     Effect.flatMap((response) =>
       Effect.try({
         try: () => parse(response),
@@ -254,6 +255,14 @@ const requestParsed = <A>(
   );
 
 export interface Workspace {
+  readonly id: string;
+  readonly number: number;
+  readonly label: string;
+  readonly focused: boolean;
+  readonly activeTabId: string | undefined;
+}
+
+export interface Tab {
   readonly id: string;
   readonly number: number;
   readonly label: string;
@@ -277,12 +286,36 @@ function parseWorkspaceList(input: unknown): ReadonlyArray<Workspace> {
       number: value.number,
       label: typeof value.label === "string" ? value.label : value.workspace_id,
       focused: value.focused === true,
+      activeTabId: typeof value.active_tab_id === "string" ? value.active_tab_id : undefined,
+    };
+  });
+}
+
+function parseTabList(input: unknown): ReadonlyArray<Tab> {
+  if (!isRecord(input) || !isRecord(input.result) || !Array.isArray(input.result.tabs)) {
+    throw new HerdrError({ message: "Invalid tab.list response" });
+  }
+  return input.result.tabs.map((value) => {
+    if (!isRecord(value) || typeof value.tab_id !== "string" || typeof value.number !== "number") {
+      throw new HerdrError({ message: "Invalid tab in tab.list response" });
+    }
+    return {
+      id: value.tab_id,
+      number: value.number,
+      label: typeof value.label === "string" ? value.label : value.tab_id,
+      focused: value.focused === true,
     };
   });
 }
 
 export const listWorkspaces = (path: string): Effect.Effect<ReadonlyArray<Workspace>, HerdrError> =>
   requestParsed(path, "workspace.list", parseWorkspaceList);
+
+export const listTabs = (
+  path: string,
+  workspaceId: string,
+): Effect.Effect<ReadonlyArray<Tab>, HerdrError> =>
+  requestParsed(path, "tab.list", parseTabList, { workspace_id: workspaceId });
 
 export const createAgent = (
   path: string,

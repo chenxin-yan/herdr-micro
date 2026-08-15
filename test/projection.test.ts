@@ -22,8 +22,8 @@ describe("projectFleet", () => {
     });
   });
 
-  test("projects exactly six agents in Herdr order", () => {
-    const fleet = Array.from({ length: 6 }, (_, index) => agent(index + 1));
+  test("projects exactly five agents in Herdr order", () => {
+    const fleet = Array.from({ length: 5 }, (_, index) => agent(index + 1));
     const projection = projectFleet(fleet, 0);
     expect(projection.slots.map(({ paneId }) => paneId)).toEqual([
       "pane-1",
@@ -31,30 +31,29 @@ describe("projectFleet", () => {
       "pane-3",
       "pane-4",
       "pane-5",
-      "pane-6",
     ]);
     expect(projection.pageCount).toBe(1);
     expect(projection.overflow).toBe(0);
     expect(projection.offPageState).toBeUndefined();
   });
 
-  test("pages seven agents and prioritizes off-page state", () => {
-    const fleet = Array.from({ length: 7 }, (_, index) => agent(index + 1));
-    fleet[6] = agent(7, "blocked");
+  test("pages six agents and prioritizes off-page state", () => {
+    const fleet = Array.from({ length: 6 }, (_, index) => agent(index + 1));
+    fleet[5] = agent(6, "blocked");
 
     const first = projectFleet(fleet, 0);
-    expect(first.slots).toHaveLength(6);
+    expect(first.slots).toHaveLength(5);
     expect(first.pageCount).toBe(2);
     expect(first.overflow).toBe(1);
     expect(first.offPageState).toBe("blocked");
 
     const second = projectFleet(fleet, 1);
-    expect(second.slots.map(({ paneId }) => paneId)).toEqual(["pane-7"]);
+    expect(second.slots.map(({ paneId }) => paneId)).toEqual(["pane-6"]);
     expect(second.offPageState).toBe("idle");
   });
 
   test("shifts following agents left when an agent exits mid-page", () => {
-    const fleet = Array.from({ length: 7 }, (_, index) => agent(index + 1));
+    const fleet = Array.from({ length: 6 }, (_, index) => agent(index + 1));
     const withoutThird = fleet.filter(({ paneId }) => paneId !== "pane-3");
 
     expect(projectFleet(withoutThird, 0).slots.map(({ paneId }) => paneId)).toEqual([
@@ -63,12 +62,11 @@ describe("projectFleet", () => {
       "pane-4",
       "pane-5",
       "pane-6",
-      "pane-7",
     ]);
   });
 
   test("clamps the current page after the last page disappears", () => {
-    const fleet = Array.from({ length: 6 }, (_, index) => agent(index + 1));
+    const fleet = Array.from({ length: 5 }, (_, index) => agent(index + 1));
     expect(projectFleet(fleet, 1).pageIndex).toBe(0);
   });
 });

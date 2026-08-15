@@ -9,6 +9,7 @@ import { TestClock } from "effect/testing";
 import {
   connect,
   createAgent,
+  listTabs,
   listWorkspaces,
   parseSnapshot,
   readUntil,
@@ -132,7 +133,7 @@ test("connect installs a lifetime error listener after connecting", async () => 
   }
 });
 
-test("one-shot Socket API requests list Workspaces and focus a newly created agent", async () => {
+test("one-shot Socket API requests list navigation and focus a newly created agent", async () => {
   const path = `/tmp/herdr-micro-request-${process.pid}-${Date.now()}.sock`;
   const requests: Array<{ method: string; params: Record<string, unknown> }> = [];
   const server = createServer((socket) => {
@@ -149,12 +150,30 @@ test("one-shot Socket API requests list Workspaces and focus a newly created age
             ? {
                 id: request.id,
                 result: {
-                  workspaces: [{ workspace_id: "w1", number: 1, label: "project", focused: true }],
+                  workspaces: [
+                    {
+                      workspace_id: "w1",
+                      number: 1,
+                      label: "project",
+                      focused: true,
+                      active_tab_id: "t1",
+                    },
+                  ],
                 },
               }
-            : request.method === "tab.create"
-              ? { id: request.id, result: { root_pane: { pane_id: "p2" } } }
-              : { id: request.id, result: { type: "ok" } },
+            : request.method === "tab.list"
+              ? {
+                  id: request.id,
+                  result: {
+                    tabs: [
+                      { tab_id: "t1", number: 1, label: "main", focused: true },
+                      { tab_id: "t2", number: 2, focused: false },
+                    ],
+                  },
+                }
+              : request.method === "tab.create"
+                ? { id: request.id, result: { root_pane: { pane_id: "p2" } } }
+                : { id: request.id, result: { type: "ok" } },
         )}\n`,
       );
     });
@@ -163,17 +182,22 @@ test("one-shot Socket API requests list Workspaces and focus a newly created age
   try {
     await Effect.runPromise(sendRequest(path, "agent.focus", { target: "p1" }));
     expect(await Effect.runPromise(listWorkspaces(path))).toEqual([
-      { id: "w1", number: 1, label: "project", focused: true },
+      { id: "w1", number: 1, label: "project", focused: true, activeTabId: "t1" },
+    ]);
+    expect(await Effect.runPromise(listTabs(path, "w1"))).toEqual([
+      { id: "t1", number: 1, label: "main", focused: true },
+      { id: "t2", number: 2, label: "t2", focused: false },
     ]);
     await Effect.runPromise(createAgent(path, "w1", "pi"));
     expect(requests.map(({ method }) => method)).toEqual([
       "agent.focus",
       "workspace.list",
+      "tab.list",
       "tab.create",
       "pane.send_input",
     ]);
-    expect(requests[2]?.params).toEqual({ workspace_id: "w1", focus: true });
-    expect(requests[3]?.params).toEqual({ pane_id: "p2", text: "pi", keys: ["enter"] });
+    expect(requests[3]?.params).toEqual({ workspace_id: "w1", focus: true });
+    expect(requests[4]?.params).toEqual({ pane_id: "p2", text: "pi", keys: ["enter"] });
   } finally {
     await new Promise<void>((resolve) => server.close(() => resolve()));
     rmSync(path, { force: true });

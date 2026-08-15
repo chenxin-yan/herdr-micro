@@ -29,11 +29,11 @@ Herdr's semantic classification of an agent as `idle`, `working`, `blocked`, `do
 _Avoid_: LED state, completion status
 
 **Agent Slot**:
-One of six Deck keys that represents an agent and displays that agent's state.
+One of five Deck keys that represents an agent and displays that agent's state.
 _Avoid_: Agent key, pane key
 
 **Agent Page**:
-An ordered group of up to six agents projected onto the Agent Slots. Agent Pages preserve Herdr's agent order.
+An ordered group of up to five agents projected onto the Agent Slots. Agent Pages preserve Herdr's agent order.
 _Avoid_: Bank, layer
 
 **Selected Agent**:
@@ -41,11 +41,11 @@ The agent represented by the most recently pressed Agent Slot. Agent commands ta
 _Avoid_: Focused terminal, active pane
 
 **Command Key**:
-One of six Deck keys assigned to an action rather than an agent. Configuration numbers Command Keys 1–6 independently of the MacroPad's physical key numbers 7–12.
+One of six Deck keys assigned to an action rather than an agent. Configuration numbers Command Keys 1–6 independently of the MacroPad's physical key numbers 6–11.
 _Avoid_: Shortcut slot, macro key
 
 **Page Key**:
-The Command Key that cycles Agent Pages and indicates whether an agent outside the current page needs attention.
+Physical key 5, which cycles Agent Pages and indicates whether an agent outside the current page needs attention.
 _Avoid_: Overflow key, next key
 
 **Key Alias**:

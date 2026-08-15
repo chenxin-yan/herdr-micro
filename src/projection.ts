@@ -18,7 +18,7 @@ interface FleetProjection {
   readonly offPageState: AgentState | undefined;
 }
 
-export const PAGE_SIZE = 6;
+export const PAGE_SIZE = 5;
 const PRIORITY: Record<AgentState, number> = {
   idle: 0,
   unknown: 1,

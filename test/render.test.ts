@@ -14,20 +14,30 @@ const agent = (index: number, state: Agent["state"] = "idle"): Agent => ({
 
 describe("buildRender", () => {
   test("renders agent state LEDs, off-page priority, and selected-agent OLED", () => {
-    const fleet = Array.from({ length: 7 }, (_, index) => agent(index + 1));
+    const fleet = Array.from({ length: 6 }, (_, index) => agent(index + 1));
     fleet[0] = agent(1, "working");
-    fleet[6] = agent(7, "blocked");
+    fleet[5] = agent(6, "blocked");
 
-    const render = buildRender(fleet, 0, "p1", "project", DEFAULT_CONFIG);
+    const render = buildRender(fleet, 0, "p1", "project", undefined, DEFAULT_CONFIG);
     expect(render.led).toHaveLength(12);
     expect(render.led[0]).toEqual([0, 0, 51]);
-    expect(render.led[7]).toEqual([51, 0, 0]);
+    expect(render.led[5]).toEqual([51, 0, 0]);
     expect(render.text).toEqual(["agent-1", "working", "workspace/tab-1", "Page 1/2"]);
   });
 
   test("renders target, focused Workspace, page, and fleet count without selection", () => {
-    const render = buildRender([agent(1)], 0, undefined, "project", DEFAULT_CONFIG);
+    const render = buildRender([agent(1)], 0, undefined, "project", undefined, DEFAULT_CONFIG);
     expect(render.text).toEqual(["Target: local", "Workspace: project", "Page 1/1", "Fleet: 1"]);
+  });
+
+  test("shows Tab mode for selected and unselected OLED views", () => {
+    const tabMode = { label: "tests", index: 1, count: 3 };
+    expect(buildRender([agent(1)], 0, undefined, "project", tabMode, DEFAULT_CONFIG).text[1]).toBe(
+      "Tabs 2/3: tests",
+    );
+    expect(buildRender([agent(1)], 0, "p1", "project", tabMode, DEFAULT_CONFIG).text[2]).toBe(
+      "Tabs 2/3: tests",
+    );
   });
 });
 

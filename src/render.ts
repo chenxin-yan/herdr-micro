@@ -18,11 +18,18 @@ const stateColor = (config: Config, state: AgentState) =>
 
 const OFF = [0, 0, 0] as const;
 
+export interface TabModeRender {
+  readonly label: string;
+  readonly index: number;
+  readonly count: number;
+}
+
 export function buildRender(
   fleet: ReadonlyArray<Agent>,
   pageIndex: number,
   selectedPaneId: string | undefined,
   focusedWorkspace: string | undefined,
+  tabMode: TabModeRender | undefined,
   config: Config,
 ): RenderSnapshot {
   const page = projectFleet(fleet, pageIndex);
@@ -35,24 +42,24 @@ export function buildRender(
       const agent = page.slots[index];
       return agent ? stateColor(config, agent.state) : OFF;
     }),
-    ...Object.values(config.commandKeys).map((action) => {
-      if (action.type === "none") return OFF;
-      if (action.type === "nextPage") {
-        return page.offPageState === undefined ? OFF : stateColor(config, page.offPageState);
-      }
-      return stateColor(config, "idle");
-    }),
+    page.offPageState === undefined ? OFF : stateColor(config, page.offPageState),
+    ...Object.values(config.commandKeys).map((action) =>
+      action.type === "none" ? OFF : stateColor(config, "idle"),
+    ),
   ];
+  const tabLine = tabMode
+    ? line(`Tabs ${tabMode.index + 1}/${tabMode.count}: ${tabMode.label}`)
+    : undefined;
   const text = selected
     ? [
         line(selected.name),
         line(selected.state),
-        line(`${selected.workspaceId}/${selected.tabId}`),
+        tabLine ?? line(`${selected.workspaceId}/${selected.tabId}`),
         `Page ${page.pageNumber}/${page.pageCount}`,
       ]
     : [
         "Target: local",
-        line(`Workspace: ${focusedWorkspace ?? "—"}`),
+        tabLine ?? line(`Workspace: ${focusedWorkspace ?? "—"}`),
         `Page ${page.pageNumber}/${page.pageCount}`,
         line(`Fleet: ${fleet.length}${page.overflow > 0 ? ` +${page.overflow}` : ""}`),
       ];

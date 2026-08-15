@@ -32,7 +32,7 @@ describe("loadConfig", () => {
       path,
       JSON.stringify({
         defaultAgentCommand: ["pi"],
-        commandKeys: { "2": { type: "nextPage" } },
+        commandKeys: { "2": { type: "closeTab" } },
         appearance: DEFAULT_CONFIG.appearance,
       }),
     );
@@ -40,7 +40,7 @@ describe("loadConfig", () => {
     const config = await Effect.runPromise(loadConfig(path));
     expect(config.commandKeys).toEqual({
       "1": { type: "none" },
-      "2": { type: "nextPage" },
+      "2": { type: "closeTab" },
       "3": { type: "none" },
       "4": { type: "none" },
       "5": { type: "none" },

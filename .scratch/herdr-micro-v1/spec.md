@@ -19,32 +19,32 @@ Terminology: see `CONTEXT.md`. Decisions: see `docs/adr/`.
 ## Fleet projection
 
 - Fleet = agents reported by Herdr, in Herdr's order. Herdr is the sole source of truth; no state duplicated on Deck or Host beyond the current projection.
-- Six **Agent Slots** (physical keys 1–6), paged. **Agent Pages** of six; agents shift left when one exits.
-- **Page Key** cycles pages (wraps). Its LED shows highest-priority state among _off-page_ agents.
+- Five **Agent Slots** (physical keys 0–4), paged. **Agent Pages** of five; agents shift left when one exits.
+- Physical key 5 is the fixed **Page Key**. It cycles pages (wraps), clears selection, and its LED shows highest-priority state among _off-page_ agents.
 - **Selected Agent** = last Agent Slot pressed. Cleared on page change. Agent commands (Enter, Send Ctrl-C) target it; ignored when none selected.
 - State priority: `blocked > done > working > unknown > idle` (Herdr's five semantic states; presentation only).
 
 ## Controls
 
-Physical keys 7–12 are **Command Keys**, configured as logical 1–6:
+Physical keys 6–11 are **Command Keys**, configured as logical 1–6. The built-in layout is: 6 = `newAgent`, 7 = `closeTab`, 8 = `none`, 9 = right-Command `keyAlias`, 10 = `enter`, 11 = `sendCtrlC`.
 
 | Action      | Behavior                                                                                                                                                           |
 | ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `newAgent`  | Create and focus a tab in the focused Workspace, `pane run` the configured `defaultAgentCommand` (argv array) in its root pane; Herdr detection picks up the agent |
-| `nextPage`  | Cycle Agent Pages                                                                                                                                                  |
+| `closeTab`  | Close the currently focused tab                                                                                                                                    |
 | `keyAlias`  | Host commands Deck to hold one configured HID key (e.g. `RIGHT_GUI` for dictation) while the Command Key is held. Single key only — no chords/sequences            |
 | `enter`     | `agent send-keys <selected> enter`                                                                                                                                 |
 | `sendCtrlC` | `agent send-keys <selected> ctrl+c` — plain tap, no hold                                                                                                           |
 | `none`      | Inert                                                                                                                                                              |
 
-Encoder: rotate = cycle Workspaces with eager focus; press = jump to the next attention agent (`blocked` agents in Herdr order, then `done` agents in Herdr order), selecting it, flipping to its Agent Page, and focusing it in Herdr. Press cycles with wraparound and is a no-op when no agent needs attention.
+Encoder defaults to Workspace mode: rotation cycles and eagerly focuses Workspaces with the hardware delta direction inverted. Press enters Tab mode; rotation then cycles and eagerly focuses tabs within the current Workspace, with the same inverted direction. Press again or four seconds without rotation returns to Workspace mode. The OLED identifies Tab mode and the selected tab.
 Agent Slot press: `agent focus` (changes Herdr shared focus; does not raise the macOS window — accepted for v1).
 
-Dropped from v1: close tab, dictation-as-host-emitted-chord (rejected: macOS Accessibility churn), overflow beyond paging, transcript on OLED.
+Dropped from v1: dictation-as-host-emitted-chord (rejected: macOS Accessibility churn), overflow beyond paging, transcript on OLED.
 
 ## OLED
 
-Selected agent: name, state, workspace/tab, `Page N/M`. No selection: Target, focused Workspace, page, fleet count (`+N` overflow indicator).
+Selected agent: name, state, workspace/tab, `Page N/M`. No selection: Target, focused Workspace, page, fleet count (`+N` overflow indicator). In Tab mode the workspace/tab line shows `Tabs N/M: label` so the temporary mode is visible.
 
 ## Device Protocol (ADR-0003)
 
@@ -72,11 +72,11 @@ Rules: the protocol itself is unversioned; instead both hellos carry the app ver
   "defaultAgentCommand": ["pi"],
   "commandKeys": {
     "1": { "type": "newAgent" },
-    "2": { "type": "nextPage" },
-    "3": { "type": "keyAlias", "key": "RIGHT_GUI" },
-    "4": { "type": "enter" },
-    "5": { "type": "sendCtrlC" },
-    "6": { "type": "none" }
+    "2": { "type": "closeTab" },
+    "3": { "type": "none" },
+    "4": { "type": "keyAlias", "key": "RIGHT_GUI" },
+    "5": { "type": "enter" },
+    "6": { "type": "sendCtrlC" }
   },
   "appearance": {
     "brightness": 0.2,
@@ -91,7 +91,7 @@ Rules: the protocol itself is unversioned; instead both hellos carry the app ver
 }
 ```
 
-Missing/partial `commandKeys` → unbound keys are `none` (no implicit functional bindings; `nextPage` not required). Duplicates allowed. Key Alias keys come from a closed enum mapped to Adafruit `Keycode` names.
+Missing/partial `commandKeys` → unbound keys are `none` (no implicit functional bindings). Duplicates allowed. Key Alias keys come from a closed enum mapped to Adafruit `Keycode` names.
 
 ## Distribution
 

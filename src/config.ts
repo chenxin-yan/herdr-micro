@@ -33,7 +33,7 @@ const HID_KEYS: readonly string[] = [
 const CommandAction = Schema.Union([
   Schema.Struct({ type: Schema.Literal("none") }),
   Schema.Struct({ type: Schema.Literal("newAgent") }),
-  Schema.Struct({ type: Schema.Literal("nextPage") }),
+  Schema.Struct({ type: Schema.Literal("closeTab") }),
   Schema.Struct({ type: Schema.Literal("enter") }),
   Schema.Struct({ type: Schema.Literal("sendCtrlC") }),
   Schema.Struct({ type: Schema.Literal("keyAlias"), key: Schema.Literals(HID_KEYS) }),
@@ -82,11 +82,11 @@ export const DEFAULT_CONFIG: Config = {
   // provided commandKeys still default to none per spec.
   commandKeys: {
     "1": { type: "newAgent" },
-    "2": { type: "nextPage" },
-    "3": { type: "keyAlias", key: "RIGHT_GUI" },
-    "4": { type: "enter" },
-    "5": { type: "sendCtrlC" },
-    "6": { type: "none" },
+    "2": { type: "closeTab" },
+    "3": { type: "none" },
+    "4": { type: "keyAlias", key: "RIGHT_GUI" },
+    "5": { type: "enter" },
+    "6": { type: "sendCtrlC" },
   },
 };
 

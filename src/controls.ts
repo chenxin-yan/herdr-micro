@@ -1,5 +1,5 @@
 import type { CommandKeys } from "./config.ts";
-import type { Workspace } from "./herdr.ts";
+import type { Tab, Workspace } from "./herdr.ts";
 import { PAGE_SIZE, projectFleet, type Agent } from "./projection.ts";
 import type { DeckMessage } from "./serial.ts";
 
@@ -7,20 +7,28 @@ export interface ControlState {
   readonly pageIndex: number;
   readonly selectedPaneId: string | undefined;
   readonly workspaceId: string | undefined;
+  readonly encoderMode: "workspaces" | "tabs";
+  readonly tabId: string | undefined;
 }
+
+export type ControlMessage = DeckMessage | { readonly t: "encoderTimeout" };
 
 export type ControlEffect =
   | { readonly type: "focusAgent"; readonly paneId: string }
   | { readonly type: "sendKeys"; readonly paneId: string; readonly keys: readonly string[] }
   | { readonly type: "newAgent" }
+  | { readonly type: "closeTab" }
   | { readonly type: "hid"; readonly key: string; readonly down: boolean }
   | { readonly type: "selectWorkspace"; readonly delta: number }
-  | { readonly type: "jumpToAttention"; readonly paneId: string };
+  | { readonly type: "enterTabMode" }
+  | { readonly type: "selectTab"; readonly delta: number };
 
 export const initialControlState: ControlState = {
   pageIndex: 0,
   selectedPaneId: undefined,
   workspaceId: undefined,
+  encoderMode: "workspaces",
+  tabId: undefined,
 };
 
 export function reconcileControls(state: ControlState, fleet: ReadonlyArray<Agent>): ControlState {
@@ -35,45 +43,63 @@ export function reconcileControls(state: ControlState, fleet: ReadonlyArray<Agen
   };
 }
 
-export function reduceDeckMessage(
+export function reduceControlMessage(
   state: ControlState,
-  message: DeckMessage,
+  message: ControlMessage,
   fleet: ReadonlyArray<Agent>,
   commandKeys: CommandKeys,
 ): { readonly state: ControlState; readonly effects: ReadonlyArray<ControlEffect> } {
+  if (message.t === "encoderTimeout") {
+    return {
+      state: { ...state, encoderMode: "workspaces", tabId: undefined },
+      effects: [],
+    };
+  }
   if (message.t === "hello") return { state, effects: [] };
   if (message.t === "encoder") {
-    return message.delta === 0
-      ? { state, effects: [] }
-      : { state, effects: [{ type: "selectWorkspace", delta: message.delta }] };
+    if (message.delta === 0) return { state, effects: [] };
+    const delta = -message.delta;
+    return {
+      state,
+      effects: [
+        state.encoderMode === "tabs"
+          ? { type: "selectTab", delta }
+          : { type: "selectWorkspace", delta },
+      ],
+    };
   }
   if (message.k === 12) {
     if (!message.down) return { state, effects: [] };
-    const attention = [
-      ...fleet.filter(({ state: agentState }) => agentState === "blocked"),
-      ...fleet.filter(({ state: agentState }) => agentState === "done"),
-    ];
-    if (attention.length === 0) return { state, effects: [] };
-    const selectedIndex = attention.findIndex(({ paneId }) => paneId === state.selectedPaneId);
-    const target = attention[(selectedIndex + 1) % attention.length]!;
+    const enteringTabs = state.encoderMode === "workspaces";
     return {
       state: {
         ...state,
-        pageIndex: Math.floor(fleet.indexOf(target) / PAGE_SIZE),
-        selectedPaneId: target.paneId,
+        encoderMode: enteringTabs ? "tabs" : "workspaces",
+        tabId: undefined,
       },
-      effects: [{ type: "jumpToAttention", paneId: target.paneId }],
+      effects: enteringTabs ? [{ type: "enterTabMode" }] : [],
     };
   }
 
   const page = projectFleet(fleet, state.pageIndex);
-  if (message.k < 6) {
+  if (message.k < PAGE_SIZE) {
     if (!message.down) return { state, effects: [] };
     const selected = page.slots[message.k];
     if (!selected) return { state, effects: [] };
     return {
       state: { ...state, selectedPaneId: selected.paneId },
       effects: [{ type: "focusAgent", paneId: selected.paneId }],
+    };
+  }
+  if (message.k === PAGE_SIZE) {
+    if (!message.down) return { state, effects: [] };
+    return {
+      state: {
+        ...state,
+        pageIndex: (page.pageIndex + 1) % page.pageCount,
+        selectedPaneId: undefined,
+      },
+      effects: [],
     };
   }
 
@@ -85,15 +111,10 @@ export function reduceDeckMessage(
   switch (action.type) {
     case "none":
       return { state, effects: [] };
-    case "nextPage": {
-      const pageIndex = (page.pageIndex + 1) % page.pageCount;
-      return {
-        state: { ...state, pageIndex, selectedPaneId: undefined },
-        effects: [],
-      };
-    }
     case "newAgent":
       return { state, effects: [{ type: "newAgent" }] };
+    case "closeTab":
+      return { state, effects: [{ type: "closeTab" }] };
     case "enter":
       return {
         state,
@@ -111,19 +132,33 @@ export function reduceDeckMessage(
   }
 }
 
-export function cycleWorkspace(
-  workspaces: ReadonlyArray<Workspace>,
+const cycleNumbered = <
+  A extends { readonly id: string; readonly number: number; readonly focused: boolean },
+>(
+  values: ReadonlyArray<A>,
   currentId: string | undefined,
   delta: number,
-): Workspace | undefined {
-  const ordered = [...workspaces].sort((left, right) => left.number - right.number);
+): A | undefined => {
+  const ordered = [...values].sort((left, right) => left.number - right.number);
   if (ordered.length === 0) return;
-  const focusedIndex = ordered.findIndex((workspace) => workspace.focused);
+  const focusedIndex = ordered.findIndex((value) => value.focused);
   const current = ordered.findIndex(({ id }) => id === currentId);
   const start = current >= 0 ? current : focusedIndex >= 0 ? focusedIndex : 0;
   const index = (((start + delta) % ordered.length) + ordered.length) % ordered.length;
   return ordered[index];
-}
+};
+
+export const cycleWorkspace = (
+  workspaces: ReadonlyArray<Workspace>,
+  currentId: string | undefined,
+  delta: number,
+): Workspace | undefined => cycleNumbered(workspaces, currentId, delta);
+
+export const cycleTab = (
+  tabs: ReadonlyArray<Tab>,
+  currentId: string | undefined,
+  delta: number,
+): Tab | undefined => cycleNumbered(tabs, currentId, delta);
 
 export const shellCommand = (argv: readonly string[]): string =>
   argv
