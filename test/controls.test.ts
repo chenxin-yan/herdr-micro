@@ -2,12 +2,15 @@ import { describe, expect, test } from "bun:test";
 
 import { DEFAULT_CONFIG } from "../src/config.ts";
 import {
+  cycleTab,
+  cycleWorkspace,
   initialControlState,
   reconcileControls,
   reduceControlMessage,
   shellCommand,
   type ControlState,
 } from "../src/controls.ts";
+import type { Tab, Workspace } from "../src/herdr.ts";
 import type { Agent } from "../src/projection.ts";
 
 const agent = (index: number, state: Agent["state"] = "idle"): Agent => ({
@@ -40,7 +43,7 @@ describe("reduceControlMessage", () => {
     expect(press(selected, 6, [agent(1)]).effects).toEqual([{ type: "newAgent" }]);
     expect(press(selected, 7, [agent(1)]).effects).toEqual([{ type: "closeTab" }]);
     expect(press(selected, 8, [agent(1)]).effects).toEqual([
-      { type: "sendKeys", paneId: "p1", keys: ["ctrl+c"] },
+      { type: "sendKeys", paneId: "p1", keys: ["esc"] },
     ]);
     expect(press(selected, 9, [agent(1)]).effects).toEqual([
       { type: "hid", key: "RIGHT_GUI", down: true },
@@ -57,7 +60,7 @@ describe("reduceControlMessage", () => {
       { type: "sendKeys", paneId: "p1", keys: ["enter"] },
     ]);
     expect(press(selected, 11, [agent(1)]).effects).toEqual([
-      { type: "sendKeys", paneId: "p1", keys: ["esc"] },
+      { type: "sendKeys", paneId: "p1", keys: ["ctrl+c"] },
     ]);
   });
 
@@ -67,73 +70,36 @@ describe("reduceControlMessage", () => {
     expect(press(initialControlState, 11, [agent(1)]).effects).toEqual([]);
   });
 
-  test("cycles thinking forward for either encoder direction", () => {
-    const selected = { ...initialControlState, selectedPaneId: "p1" };
-    for (const delta of [-2, 1]) {
-      expect(
-        reduceControlMessage(
-          selected,
-          { t: "encoder", delta },
-          [agent(1)],
-          DEFAULT_CONFIG.commandKeys,
-        ).effects,
-      ).toEqual([
-        {
-          type: "sendKeys",
-          paneId: "p1",
-          keys: Array.from({ length: Math.abs(delta) }, () => "shift+tab"),
-        },
-      ]);
-    }
-  });
-
-  test("toggles Model layer, cycles models with flipped direction, and exits", () => {
-    const selected = { ...initialControlState, selectedPaneId: "p1" };
-    const entered = press(selected, 12, [agent(1)]);
-    expect(entered).toEqual({
-      state: { ...selected, encoderMode: "model" },
-      effects: [],
-    });
-    expect(
-      reduceControlMessage(
-        entered.state,
-        { t: "encoder", delta: -2 },
-        [agent(1)],
-        DEFAULT_CONFIG.commandKeys,
-      ).effects,
-    ).toEqual([{ type: "sendKeys", paneId: "p1", keys: ["ctrl+p", "ctrl+p"] }]);
-    expect(
-      reduceControlMessage(
-        entered.state,
-        { t: "encoder", delta: 1 },
-        [agent(1)],
-        DEFAULT_CONFIG.commandKeys,
-      ).effects,
-    ).toEqual([{ type: "sendKeys", paneId: "p1", keys: ["shift+ctrl+p"] }]);
-    expect(press(entered.state, 12, [agent(1)]).state.encoderMode).toBe("thinking");
-    expect(
-      reduceControlMessage(
-        entered.state,
-        { t: "encoderTimeout" },
-        [agent(1)],
-        DEFAULT_CONFIG.commandKeys,
-      ).state.encoderMode,
-    ).toBe("thinking");
-  });
-
-  test("ignores encoder input without a Selected Agent", () => {
-    expect(press(initialControlState, 12, [agent(1)])).toEqual({
-      state: initialControlState,
-      effects: [],
-    });
+  test("flips encoder direction in Workspace mode", () => {
     expect(
       reduceControlMessage(
         initialControlState,
-        { t: "encoder", delta: 1 },
-        [agent(1)],
+        { t: "encoder", delta: -1 },
+        [],
         DEFAULT_CONFIG.commandKeys,
       ).effects,
-    ).toEqual([]);
+    ).toEqual([{ type: "selectWorkspace", delta: 1 }]);
+  });
+
+  test("toggles Tab mode, flips rotation, and exits on timeout or another press", () => {
+    const entered = press(initialControlState, 12, []);
+    expect(entered).toEqual({
+      state: { ...initialControlState, encoderMode: "tabs" },
+      effects: [{ type: "enterTabMode" }],
+    });
+    expect(
+      reduceControlMessage(
+        entered.state,
+        { t: "encoder", delta: 1 },
+        [],
+        DEFAULT_CONFIG.commandKeys,
+      ).effects,
+    ).toEqual([{ type: "selectTab", delta: -1 }]);
+    expect(press(entered.state, 12, []).state.encoderMode).toBe("workspaces");
+    expect(
+      reduceControlMessage(entered.state, { t: "encoderTimeout" }, [], DEFAULT_CONFIG.commandKeys)
+        .state.encoderMode,
+    ).toBe("workspaces");
   });
 });
 
@@ -141,6 +107,19 @@ test("reconcileControls clamps a removed page and clears a missing Selected Agen
   expect(
     reconcileControls({ ...initialControlState, pageIndex: 1, selectedPaneId: "p6" }, [agent(1)]),
   ).toEqual(initialControlState);
+});
+
+test("cycleWorkspace and cycleTab follow Herdr numbers with wraparound", () => {
+  const workspaces: Workspace[] = [
+    { id: "w2", number: 2, label: "two", focused: false, activeTabId: "t2" },
+    { id: "w1", number: 1, label: "one", focused: true, activeTabId: "t1" },
+  ];
+  const tabs: Tab[] = [
+    { id: "t2", number: 2, label: "two", focused: false },
+    { id: "t1", number: 1, label: "one", focused: true },
+  ];
+  expect(cycleWorkspace(workspaces, "w1", 1)?.id).toBe("w2");
+  expect(cycleTab(tabs, "t1", -1)?.id).toBe("t2");
 });
 
 test("shellCommand preserves configured argv boundaries", () => {

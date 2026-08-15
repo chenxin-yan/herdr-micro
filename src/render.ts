@@ -18,12 +18,18 @@ const stateColor = (config: Config, state: AgentState) =>
 
 const OFF = [0, 0, 0] as const;
 
+export interface TabModeRender {
+  readonly label: string;
+  readonly index: number;
+  readonly count: number;
+}
+
 export function buildRender(
   fleet: ReadonlyArray<Agent>,
   pageIndex: number,
   selectedPaneId: string | undefined,
   focusedWorkspace: string | undefined,
-  encoderMode: "thinking" | "model",
+  tabMode: TabModeRender | undefined,
   config: Config,
 ): RenderSnapshot {
   const page = projectFleet(fleet, pageIndex);
@@ -41,16 +47,19 @@ export function buildRender(
       action.type === "none" ? OFF : stateColor(config, "idle"),
     ),
   ];
+  const tabLine = tabMode
+    ? line(`Tabs ${tabMode.index + 1}/${tabMode.count}: ${tabMode.label}`)
+    : undefined;
   const text = selected
     ? [
         line(selected.name),
         line(selected.state),
-        `Enc: ${encoderMode}`,
+        tabLine ?? line(`${selected.workspaceId}/${selected.tabId}`),
         `Page ${page.pageNumber}/${page.pageCount}`,
       ]
     : [
         "Target: local",
-        line(`Workspace: ${focusedWorkspace ?? "—"}`),
+        tabLine ?? line(`Workspace: ${focusedWorkspace ?? "—"}`),
         `Page ${page.pageNumber}/${page.pageCount}`,
         line(`Fleet: ${fleet.length}${page.overflow > 0 ? ` +${page.overflow}` : ""}`),
       ];

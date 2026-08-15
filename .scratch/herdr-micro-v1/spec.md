@@ -21,7 +21,7 @@ Terminology: see `CONTEXT.md`. Decisions: see `docs/adr/`.
 - Fleet = agents reported by Herdr, in Herdr's order. Herdr is the sole source of truth; no state duplicated on Deck or Host beyond the current projection.
 - Five **Agent Slots** (physical keys 0–4), paged. **Agent Pages** of five; agents shift left when one exits.
 - Physical key 5 is the fixed **Page Key**. It cycles pages (wraps), clears selection, and its LED shows highest-priority state among _off-page_ agents.
-- **Selected Agent** = last Agent Slot pressed. Cleared on page change. Agent commands (Enter, Send Ctrl-C, Send Escape, and encoder controls) target it; ignored when none selected.
+- **Selected Agent** = last Agent Slot pressed. Cleared on page change. Agent commands (Enter, Send Ctrl-C, and Send Escape) target it; ignored when none selected.
 - State priority: `blocked > done > working > unknown > idle` (Herdr's five semantic states; presentation only).
 
 ## Controls
@@ -38,14 +38,14 @@ Physical keys 6–11 are **Command Keys**, configured as logical 1–6. The buil
 | `sendEsc`   | `agent send-keys <selected> esc`                                                                                                                                   |
 | `none`      | Inert                                                                                                                                                              |
 
-The encoder controls the Selected Agent's pi session by sending pi's default keybindings; with no selection it is inert. Its default Thinking layer sends `shift+tab` on every rotation detent, cycling thinking forward for either direction because pi has no default backward-thinking binding. Press enters the Model layer; rotation uses the existing inverted hardware direction to send `ctrl+p` forward or `shift+ctrl+p` backward. Press again or four seconds without rotation returns to Thinking. The OLED identifies the active layer. Users who remap these pi keybindings must make matching Host changes.
+Encoder defaults to Workspace mode: rotation cycles and eagerly focuses Workspaces with the hardware delta direction inverted. Press enters Tab mode; rotation then cycles and eagerly focuses tabs within the current Workspace, with the same inverted direction. Press again or four seconds without rotation returns to Workspace mode. The OLED identifies Tab mode and the selected tab.
 Agent Slot press: `agent focus` (changes Herdr shared focus; does not raise the macOS window — accepted for v1).
 
 Dropped from v1: dictation-as-host-emitted-chord (rejected: macOS Accessibility churn), overflow beyond paging, transcript on OLED.
 
 ## OLED
 
-Selected agent: name, state, active encoder layer, `Page N/M`. No selection: Target, focused Workspace, page, fleet count (`+N` overflow indicator).
+Selected agent: name, state, workspace/tab, `Page N/M`. No selection: Target, focused Workspace, page, fleet count (`+N` overflow indicator). In Tab mode the workspace/tab line shows `Tabs N/M: label` so the temporary mode is visible.
 
 ## Device Protocol (ADR-0003)
 
