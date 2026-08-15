@@ -31,8 +31,6 @@ import { buildRender, LatestRenderQueue } from "./render.ts";
 import { watchDeck, type DeckMessage, type DeckWriter } from "./serial.ts";
 
 const HERDR_VERSION_TIMEOUT = "5 seconds";
-// ponytail: fixed desk-calibrated timeout; make configurable only if real use needs tuning.
-const TAB_MODE_TIMEOUT_MS = 4_000;
 const HERDR_SOCKET = `${homedir()}/.config/herdr/herdr.sock`;
 
 const herdrVersion = Effect.tryPromise({
@@ -149,7 +147,7 @@ const hostProgram = (config: Config) =>
     };
     const armTabModeTimer = () => {
       clearTabModeTimer();
-      tabModeTimer = setTimeout(leaveTabMode, TAB_MODE_TIMEOUT_MS);
+      tabModeTimer = setTimeout(leaveTabMode, config.encoderTimeoutSeconds * 1_000);
     };
 
     const execute = (effect: ControlEffect, deck: DeckWriter): Effect.Effect<void, never> => {

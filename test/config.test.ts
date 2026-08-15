@@ -30,6 +30,7 @@ describe("loadConfig", () => {
   test("returns built-in defaults when the file is missing", async () => {
     const config = await Effect.runPromise(loadConfig(tempPath()));
     expect(config).toEqual(DEFAULT_CONFIG);
+    expect(config.encoderTimeoutSeconds).toBe(4);
   });
 
   test("rejects an incomplete provided file", async () => {
@@ -38,7 +39,7 @@ describe("loadConfig", () => {
 
     const error = await Effect.runPromise(loadConfig(path).pipe(Effect.flip));
     expect(error.message).toContain(`Invalid configuration at ${path}`);
-    expect(error.message).toContain('Missing key\n  at ["commandKeys"]');
+    expect(error.message).toContain('Missing key\n  at ["encoderTimeoutSeconds"]');
   });
 
   test("rejects unknown properties", async () => {
@@ -65,6 +66,24 @@ describe("loadConfig", () => {
     await Bun.write(path, JSON.stringify(provided));
 
     expect(await Effect.runPromise(loadConfig(path))).toEqual(provided);
+  });
+
+  test("rejects invalid encoder inactivity timeouts", async () => {
+    for (const encoderTimeoutSeconds of [0, -1, "4"]) {
+      const path = tempPath();
+      await Bun.write(path, JSON.stringify({ ...DEFAULT_CONFIG, encoderTimeoutSeconds }));
+
+      const error = await Effect.runPromise(loadConfig(path).pipe(Effect.flip));
+      expect(error.message).toContain(`Invalid configuration at ${path}`);
+      expect(error.message).toContain('at ["encoderTimeoutSeconds"]');
+    }
+  });
+
+  test("accepts fractional encoder inactivity timeouts", async () => {
+    const path = tempPath();
+    await Bun.write(path, JSON.stringify({ ...DEFAULT_CONFIG, encoderTimeoutSeconds: 1.5 }));
+
+    expect((await Effect.runPromise(loadConfig(path))).encoderTimeoutSeconds).toBe(1.5);
   });
 
   test("rejects malformed JSON with a schema error", async () => {

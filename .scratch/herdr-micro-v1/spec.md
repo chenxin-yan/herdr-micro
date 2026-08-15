@@ -36,7 +36,7 @@ Physical keys 6–11 are **Command Keys**, configured as logical 1–6. The buil
 | `sendKeys` | Send the configured non-empty key sequence to the Selected Agent via `agent send-keys`; Herdr validates key spellings before writing any bytes                     |
 | `none`     | Inert                                                                                                                                                              |
 
-Encoder defaults to Workspace mode: rotation cycles and eagerly focuses Workspaces with the hardware delta direction inverted. Press enters Tab mode; rotation then cycles and eagerly focuses tabs within the current Workspace, with the same inverted direction. Press again or four seconds without rotation returns to Workspace mode. The OLED identifies Tab mode and the selected tab.
+Encoder defaults to Workspace mode: rotation cycles and eagerly focuses Workspaces with the hardware delta direction inverted. Press enters Tab mode; rotation then cycles and eagerly focuses tabs within the current Workspace. Press again or `encoderTimeoutSeconds` without rotation (four seconds by default) returns to Workspace mode. The OLED identifies Tab mode and the selected tab.
 Agent Slot press requests `agent focus`; the resulting Herdr focus update selects the agent and refreshes the Deck (it does not raise the macOS window — accepted for v1).
 
 Dropped from v1: dictation-as-host-emitted-chord (rejected: macOS Accessibility churn), overflow beyond paging, transcript on OLED.
@@ -71,6 +71,7 @@ Rules: the protocol itself is unversioned; instead both hellos carry the app ver
 ```json
 {
   "defaultAgentCommand": ["pi"],
+  "encoderTimeoutSeconds": 4,
   "commandKeys": {
     "1": { "type": "sendKeys", "keys": ["ctrl+c"] },
     "2": { "type": "sendKeys", "keys": ["esc"] },
@@ -108,7 +109,7 @@ A Command Key is unbound only when its required entry explicitly uses `{"type":"
 4. **Device Bundle**: input scan (keypad events), JSONL parse with bounded buffer, render, HID key down/up, waiting-for-host screen.
 5. **End-to-end**: reconnect matrix (Deck unplug, Host restart, Herdr restart), then LaunchAgent + Nix packaging.
 
-Tunables left as calibration knobs (hardware truths, not spec): frame cap, backoff ceiling, LED animation timing, OLED refresh cadence.
+Tunables left as calibration knobs (hardware truths, not spec): frame cap, backoff ceiling, LED animation timing, OLED refresh cadence. The encoder inactivity timeout is exposed as `encoderTimeoutSeconds` in Host configuration.
 
 ## Spike outcomes (ticket 01, measured on hardware)
 

@@ -45,6 +45,7 @@ const CommandAction = Schema.Union([
 const HexColor = Schema.String.check(Schema.isPattern(/^#[0-9a-fA-F]{6}$/));
 const ConfigSchema = Schema.Struct({
   defaultAgentCommand: Schema.Array(Schema.String),
+  encoderTimeoutSeconds: Schema.Finite.check(Schema.isGreaterThan(0)),
   commandKeys: Schema.Struct({
     "1": CommandAction,
     "2": CommandAction,
@@ -71,6 +72,7 @@ export type CommandKeys = Config["commandKeys"];
 
 export const DEFAULT_CONFIG: Config = {
   defaultAgentCommand: ["pi"],
+  encoderTimeoutSeconds: 4,
   commandKeys: {
     "1": { type: "sendKeys", keys: ["ctrl+c"] },
     "2": { type: "sendKeys", keys: ["esc"] },
