@@ -1,6 +1,6 @@
 # herdr-micro
 
-A physical control deck for a fleet of [Herdr](https://herdr.dev) coding agents. An Adafruit MacroPad RP2040 (the **Deck**) mirrors agent status on its key LEDs and OLED, and routes physical presses to the right agent through a Host daemon on your Mac.
+A physical control deck for a fleet of coding agents in [Herdr](https://herdr.dev). An Adafruit MacroPad RP2040 (the **Deck**) mirrors agent status on its key LEDs and OLED, and routes physical presses to the right agent through a Host daemon on your Mac.
 
 ## Setup
 
