@@ -1,4 +1,4 @@
-import type { CommandKeys } from "./config.ts";
+import type { CommandAction, CommandKeys, LayerKeys } from "./config.ts";
 import type { Tab, Workspace } from "./herdr.ts";
 import { PAGE_SIZE, projectFleet, type Agent } from "./projection.ts";
 import type { DeckMessage } from "./serial.ts";
@@ -9,6 +9,7 @@ export interface ControlState {
   readonly workspaceId: string | undefined;
   readonly encoderMode: "workspaces" | "tabs";
   readonly tabId: string | undefined;
+  readonly pressedCommandActions: Readonly<Partial<Record<keyof CommandKeys, CommandAction>>>;
 }
 
 export type ControlMessage = DeckMessage | { readonly t: "encoderTimeout" };
@@ -30,6 +31,7 @@ export const initialControlState: ControlState = {
   workspaceId: undefined,
   encoderMode: "workspaces",
   tabId: undefined,
+  pressedCommandActions: {},
 };
 
 export function reconcileControls(
@@ -60,6 +62,7 @@ export function reduceControlMessage(
   message: ControlMessage,
   fleet: ReadonlyArray<Agent>,
   commandKeys: CommandKeys,
+  layerKeys: LayerKeys,
 ): { readonly state: ControlState; readonly effects: ReadonlyArray<ControlEffect> } {
   if (message.t === "encoderTimeout") {
     return {
@@ -114,20 +117,37 @@ export function reduceControlMessage(
     };
   }
 
-  const action = commandKeys[String(message.k - 5) as keyof CommandKeys];
-  if (action.type === "keyAlias") {
-    return { state, effects: [{ type: "hid", key: action.key, down: message.down }] };
+  const slot = String(message.k - 5) as keyof CommandKeys;
+  let action: CommandAction | undefined;
+  let pressedCommandActions: Partial<Record<keyof CommandKeys, CommandAction>>;
+  if (message.down) {
+    const layerHeld = Object.values(state.pressedCommandActions).some(
+      (pressed) => pressed.type === "layer",
+    );
+    action = layerHeld ? layerKeys[slot] : commandKeys[slot];
+    pressedCommandActions = { ...state.pressedCommandActions, [slot]: action };
+  } else {
+    action = state.pressedCommandActions[slot];
+    if (!action) return { state, effects: [] };
+    pressedCommandActions = { ...state.pressedCommandActions };
+    delete pressedCommandActions[slot];
   }
-  if (!message.down) return { state, effects: [] };
+
+  const nextState = { ...state, pressedCommandActions };
+  if (action.type === "keyAlias") {
+    return { state: nextState, effects: [{ type: "hid", key: action.key, down: message.down }] };
+  }
+  if (!message.down) return { state: nextState, effects: [] };
   switch (action.type) {
     case "none":
-      return { state, effects: [] };
+    case "layer":
+      return { state: nextState, effects: [] };
     case "newAgent":
-      return { state, effects: [{ type: "newAgent" }] };
+      return { state: nextState, effects: [{ type: "newAgent" }] };
     case "closeTab":
-      return { state, effects: [{ type: "closeTab" }] };
+      return { state: nextState, effects: [{ type: "closeTab" }] };
     case "sendKeys":
-      return { state, effects: sendSelected(state, action.keys) };
+      return { state: nextState, effects: sendSelected(state, action.keys) };
   }
 }
 

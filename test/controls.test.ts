@@ -21,8 +21,21 @@ const agent = (index: number, state: Agent["state"] = "idle"): Agent => ({
   tabId: `t${index}`,
 });
 
-const press = (state: ControlState, key: number, fleet: ReadonlyArray<Agent>) =>
-  reduceControlMessage(state, { t: "key", k: key, down: true }, fleet, DEFAULT_CONFIG.commandKeys);
+const key = (
+  state: ControlState,
+  physicalKey: number,
+  down: boolean,
+  fleet: ReadonlyArray<Agent>,
+) =>
+  reduceControlMessage(
+    state,
+    { t: "key", k: physicalKey, down },
+    fleet,
+    DEFAULT_CONFIG.commandKeys,
+    DEFAULT_CONFIG.layerKeys,
+  );
+const press = (state: ControlState, physicalKey: number, fleet: ReadonlyArray<Agent>) =>
+  key(state, physicalKey, true, fleet);
 
 describe("reduceControlMessage", () => {
   test("uses keys 0-4 as Agent Slots and key 5 as the fixed Page Key", () => {
@@ -47,15 +60,15 @@ describe("reduceControlMessage", () => {
       { type: "sendKeys", paneId: "p1", keys: ["esc"] },
     ]);
     expect(press(selected, 8, [agent(1)]).effects).toEqual([]);
-    expect(press(selected, 9, [agent(1)]).effects).toEqual([
-      { type: "hid", key: "RIGHT_GUI", down: true },
-    ]);
+    const aliasDown = press(selected, 9, [agent(1)]);
+    expect(aliasDown.effects).toEqual([{ type: "hid", key: "RIGHT_GUI", down: true }]);
     expect(
       reduceControlMessage(
-        selected,
+        aliasDown.state,
         { t: "key", k: 9, down: false },
         [agent(1)],
         DEFAULT_CONFIG.commandKeys,
+        DEFAULT_CONFIG.layerKeys,
       ).effects,
     ).toEqual([{ type: "hid", key: "RIGHT_GUI", down: false }]);
     expect(press(selected, 10, [agent(1)]).effects).toEqual([
@@ -66,6 +79,59 @@ describe("reduceControlMessage", () => {
     ]);
   });
 
+  test("uses layered actions only while the layer key is held", () => {
+    const fleet = [agent(1)];
+    const selected = { ...initialControlState, selectedPaneId: "p1" };
+    const layerDown = key(selected, 8, true, fleet);
+    expect(layerDown.effects).toEqual([]);
+    expect(press(layerDown.state, 6, fleet).effects).toEqual([{ type: "newAgent" }]);
+
+    const layerUp = key(layerDown.state, 8, false, fleet);
+    expect(layerUp.effects).toEqual([]);
+    expect(press(layerUp.state, 6, fleet).effects).toEqual([
+      { type: "sendKeys", paneId: "p1", keys: ["ctrl+c"] },
+    ]);
+  });
+
+  test("releases the action resolved at key-down after the layer is released", () => {
+    const fleet = [agent(1)];
+    const layerKeys = {
+      ...DEFAULT_CONFIG.layerKeys,
+      "4": { type: "keyAlias" as const, key: "RIGHT_SHIFT" as const },
+    };
+    const layerDown = reduceControlMessage(
+      initialControlState,
+      { t: "key", k: 8, down: true },
+      fleet,
+      DEFAULT_CONFIG.commandKeys,
+      layerKeys,
+    );
+    const aliasDown = reduceControlMessage(
+      layerDown.state,
+      { t: "key", k: 9, down: true },
+      fleet,
+      DEFAULT_CONFIG.commandKeys,
+      layerKeys,
+    );
+    expect(aliasDown.effects).toEqual([{ type: "hid", key: "RIGHT_SHIFT", down: true }]);
+    const layerUp = reduceControlMessage(
+      aliasDown.state,
+      { t: "key", k: 8, down: false },
+      fleet,
+      DEFAULT_CONFIG.commandKeys,
+      layerKeys,
+    );
+    expect(
+      reduceControlMessage(
+        layerUp.state,
+        { t: "key", k: 9, down: false },
+        fleet,
+        DEFAULT_CONFIG.commandKeys,
+        layerKeys,
+      ).effects,
+    ).toEqual([{ type: "hid", key: "RIGHT_SHIFT", down: false }]);
+  });
+
   test("forwards a configured Send Keys sequence unchanged", () => {
     const selected = { ...initialControlState, selectedPaneId: "p1" };
     const commandKeys = {
@@ -73,8 +139,13 @@ describe("reduceControlMessage", () => {
       "3": { type: "sendKeys" as const, keys: ["esc", "ctrl+c"] as const },
     };
     expect(
-      reduceControlMessage(selected, { t: "key", k: 8, down: true }, [agent(1)], commandKeys)
-        .effects,
+      reduceControlMessage(
+        selected,
+        { t: "key", k: 8, down: true },
+        [agent(1)],
+        commandKeys,
+        DEFAULT_CONFIG.layerKeys,
+      ).effects,
     ).toEqual([{ type: "sendKeys", paneId: "p1", keys: ["esc", "ctrl+c"] }]);
   });
 
@@ -97,6 +168,7 @@ describe("reduceControlMessage", () => {
         { t: "encoder", delta: -1 },
         [],
         DEFAULT_CONFIG.commandKeys,
+        DEFAULT_CONFIG.layerKeys,
       ).effects,
     ).toEqual([{ type: "selectWorkspace", delta: 1 }]);
   });
@@ -113,12 +185,18 @@ describe("reduceControlMessage", () => {
         { t: "encoder", delta: 1 },
         [],
         DEFAULT_CONFIG.commandKeys,
+        DEFAULT_CONFIG.layerKeys,
       ).effects,
     ).toEqual([{ type: "selectTab", delta: 1 }]);
     expect(press(entered.state, 12, []).state.encoderMode).toBe("workspaces");
     expect(
-      reduceControlMessage(entered.state, { t: "encoderTimeout" }, [], DEFAULT_CONFIG.commandKeys)
-        .state.encoderMode,
+      reduceControlMessage(
+        entered.state,
+        { t: "encoderTimeout" },
+        [],
+        DEFAULT_CONFIG.commandKeys,
+        DEFAULT_CONFIG.layerKeys,
+      ).state.encoderMode,
     ).toBe("workspaces");
   });
 });

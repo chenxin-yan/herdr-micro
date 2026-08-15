@@ -32,7 +32,7 @@ const HID_KEYS: readonly string[] = [
     .split(/\s+/),
 ];
 
-const CommandAction = Schema.Union([
+const RegularCommandAction = Schema.Union([
   Schema.Struct({ type: Schema.Literal("none") }),
   Schema.Struct({ type: Schema.Literal("newAgent") }),
   Schema.Struct({ type: Schema.Literal("closeTab") }),
@@ -41,6 +41,10 @@ const CommandAction = Schema.Union([
     keys: Schema.NonEmptyArray(Schema.NonEmptyString),
   }),
   Schema.Struct({ type: Schema.Literal("keyAlias"), key: Schema.Literals(HID_KEYS) }),
+]);
+const CommandAction = Schema.Union([
+  RegularCommandAction,
+  Schema.Struct({ type: Schema.Literal("layer") }),
 ]);
 const HexColor = Schema.String.check(Schema.isPattern(/^#[0-9a-fA-F]{6}$/));
 const ConfigSchema = Schema.Struct({
@@ -53,6 +57,14 @@ const ConfigSchema = Schema.Struct({
     "4": CommandAction,
     "5": CommandAction,
     "6": CommandAction,
+  }),
+  layerKeys: Schema.Struct({
+    "1": RegularCommandAction,
+    "2": RegularCommandAction,
+    "3": RegularCommandAction,
+    "4": RegularCommandAction,
+    "5": RegularCommandAction,
+    "6": RegularCommandAction,
   }),
   appearance: Schema.Struct({
     brightness: Schema.Finite.check(Schema.isBetween({ minimum: 0, maximum: 1 })),
@@ -69,6 +81,7 @@ const ConfigSchema = Schema.Struct({
 export type Config = typeof ConfigSchema.Type;
 export type CommandAction = typeof CommandAction.Type;
 export type CommandKeys = Config["commandKeys"];
+export type LayerKeys = Config["layerKeys"];
 
 export const DEFAULT_CONFIG: Config = {
   defaultAgentCommand: ["pi"],
@@ -76,10 +89,18 @@ export const DEFAULT_CONFIG: Config = {
   commandKeys: {
     "1": { type: "sendKeys", keys: ["ctrl+c"] },
     "2": { type: "sendKeys", keys: ["esc"] },
-    "3": { type: "none" },
+    "3": { type: "layer" },
     "4": { type: "keyAlias", key: "RIGHT_GUI" },
     "5": { type: "sendKeys", keys: ["enter"] },
     "6": { type: "sendKeys", keys: ["alt+enter"] },
+  },
+  layerKeys: {
+    "1": { type: "newAgent" },
+    "2": { type: "closeTab" },
+    "3": { type: "none" },
+    "4": { type: "none" },
+    "5": { type: "none" },
+    "6": { type: "none" },
   },
   appearance: {
     brightness: 0.2,

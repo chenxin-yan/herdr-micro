@@ -26,7 +26,7 @@ Terminology: see `CONTEXT.md`. Decisions: see `docs/adr/`.
 
 ## Controls
 
-Physical keys 6–11 are **Command Keys**, configured as logical 1–6. The built-in layout is: 6 = Send Keys `ctrl+c`, 7 = Send Keys `esc`, 8 = `none`, 9 = right-Command `keyAlias`, 10 = Send Keys `enter`, 11 = Send Keys `alt+enter`.
+Physical keys 6–11 are **Command Keys**, configured as logical 1–6. The built-in base layout is: 6 = Send Keys `ctrl+c`, 7 = Send Keys `esc`, 8 = `layer`, 9 = right-Command `keyAlias`, 10 = Send Keys `enter`, 11 = Send Keys `alt+enter`. While 8 is held, the second layer is: 6 = `newAgent`, 7 = `closeTab`, and 9–11 = `none`.
 
 | Action     | Behavior                                                                                                                                                           |
 | ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
@@ -34,7 +34,10 @@ Physical keys 6–11 are **Command Keys**, configured as logical 1–6. The buil
 | `closeTab` | Close the currently focused tab                                                                                                                                    |
 | `keyAlias` | Host commands Deck to hold one configured HID key (e.g. `RIGHT_GUI` for dictation) while the Command Key is held. Single key only — no chords/sequences            |
 | `sendKeys` | Send the configured non-empty key sequence to the Selected Agent via `agent send-keys`; Herdr validates key spellings before writing any bytes                     |
+| `layer`    | While held, resolve other Command Keys against `layerKeys`; valid only in the base `commandKeys` map                                                               |
 | `none`     | Inert                                                                                                                                                              |
+
+A Command Key action is resolved when the physical key goes down, and that same action handles its key-up even if the Layer Key is released first. This guarantees every held Key Alias receives its matching HID release. Agent Slots, the Page Key, and encoder behavior are unaffected by the layer. The layer map keeps all six entries for a uniform schema, although the entry at the held Layer Key's position is unreachable.
 
 Encoder defaults to Workspace mode: rotation cycles and eagerly focuses Workspaces with the hardware delta direction inverted. Press enters Tab mode; rotation then cycles and eagerly focuses tabs within the current Workspace. Press again or `encoderTimeoutSeconds` without rotation (four seconds by default) returns to Workspace mode. The OLED identifies Tab mode and the selected tab.
 Agent Slot press requests `agent focus`; the resulting Herdr focus update selects the agent and refreshes the Deck (it does not raise the macOS window — accepted for v1).
@@ -64,7 +67,7 @@ Rules: the protocol itself is unversioned; instead both hellos carry the app ver
 
 ## Configuration
 
-`~/.config/herdr-micro/config.json`, overridable via `--config PATH`. Missing file = built-in defaults. A provided file is complete and explicit: every field and all six Command Keys are required; missing, invalid, or unknown values produce an exact schema error and a nonzero exit. There is no field-level merging. One JSON schema is shared by manual and Nix installs.
+`~/.config/herdr-micro/config.json`, overridable via `--config PATH`. Missing file = built-in defaults. A provided file is complete and explicit: every field and all six entries in both `commandKeys` and `layerKeys` are required; missing, invalid, or unknown values produce an exact schema error and a nonzero exit. There is no field-level merging. One JSON schema is shared by manual and Nix installs.
 
 `herdr-micro config` prints the resolved path and whether it is configured or using built-in defaults. `herdr-micro config init` creates parent directories and writes the complete built-in defaults to that path; it refuses to overwrite an existing file. Both commands respect `--config PATH`.
 
@@ -75,10 +78,18 @@ Rules: the protocol itself is unversioned; instead both hellos carry the app ver
   "commandKeys": {
     "1": { "type": "sendKeys", "keys": ["ctrl+c"] },
     "2": { "type": "sendKeys", "keys": ["esc"] },
-    "3": { "type": "none" },
+    "3": { "type": "layer" },
     "4": { "type": "keyAlias", "key": "RIGHT_GUI" },
     "5": { "type": "sendKeys", "keys": ["enter"] },
     "6": { "type": "sendKeys", "keys": ["alt+enter"] }
+  },
+  "layerKeys": {
+    "1": { "type": "newAgent" },
+    "2": { "type": "closeTab" },
+    "3": { "type": "none" },
+    "4": { "type": "none" },
+    "5": { "type": "none" },
+    "6": { "type": "none" }
   },
   "appearance": {
     "brightness": 0.2,
@@ -93,7 +104,7 @@ Rules: the protocol itself is unversioned; instead both hellos carry the app ver
 }
 ```
 
-A Command Key is unbound only when its required entry explicitly uses `{"type":"none"}`. Duplicates are allowed. Send Keys accepts a non-empty array of non-empty Herdr key spellings; validation stays with Herdr rather than being duplicated in this schema. Key Alias keys come from a separate closed enum mapped to Adafruit `Keycode` names.
+A Command Key is unbound only when its required entry explicitly uses `{"type":"none"}`. Duplicates are allowed. `layer` may be assigned to any base Command Key but is rejected inside `layerKeys`, so layers cannot nest. Send Keys accepts a non-empty array of non-empty Herdr key spellings; validation stays with Herdr rather than being duplicated in this schema. Key Alias keys come from a separate closed enum mapped to Adafruit `Keycode` names.
 
 ## Distribution
 

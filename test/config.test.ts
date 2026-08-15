@@ -112,6 +112,30 @@ describe("loadConfig", () => {
     );
   });
 
+  test("rejects a missing layer map", async () => {
+    const path = tempPath();
+    const { layerKeys: _, ...withoutLayerKeys } = DEFAULT_CONFIG;
+    await Bun.write(path, JSON.stringify(withoutLayerKeys));
+
+    const error = await Effect.runPromise(loadConfig(path).pipe(Effect.flip));
+    expect(error.message).toContain('Missing key\n  at ["layerKeys"]');
+  });
+
+  test("rejects nested layer actions", async () => {
+    const path = tempPath();
+    await Bun.write(
+      path,
+      JSON.stringify({
+        ...DEFAULT_CONFIG,
+        layerKeys: { ...DEFAULT_CONFIG.layerKeys, "1": { type: "layer" } },
+      }),
+    );
+
+    const error = await Effect.runPromise(loadConfig(path).pipe(Effect.flip));
+    expect(error.message).toContain(`Invalid configuration at ${path}`);
+    expect(error.message).toContain('at ["layerKeys"]["1"]');
+  });
+
   test("accepts a configured Send Keys sequence", async () => {
     const path = tempPath();
     const provided = {

@@ -141,6 +141,7 @@ const hostProgram = (config: Config) =>
         { t: "encoderTimeout" },
         state.fleet,
         config.commandKeys,
+        config.layerKeys,
       ).state;
       state.tabs = [];
       enqueueRender();
@@ -269,6 +270,7 @@ const hostProgram = (config: Config) =>
           message,
           state.fleet,
           config.commandKeys,
+          config.layerKeys,
         );
         state.controls = reduced.state;
         for (const effect of reduced.effects) console.error(`  -> ${JSON.stringify(effect)}`);
@@ -292,6 +294,8 @@ const hostProgram = (config: Config) =>
           state.active.renders.clear();
           state.active = undefined;
           leaveTabMode();
+          // Key-up events are not replayed after reconnect, so discard captured actions.
+          state.controls = { ...state.controls, pressedCommandActions: {} };
           console.error("Deck disconnected");
         }),
     };
