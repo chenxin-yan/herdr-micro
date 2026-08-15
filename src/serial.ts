@@ -1,8 +1,8 @@
 import { closeSync, constants, openSync, readdirSync, readSync, writeSync } from "node:fs";
 
-import { Cause, Data, Effect, Queue, Schedule, Stream } from "effect";
+import { Cause, Data, Effect, Queue, Stream } from "effect";
 
-import { isRecord } from "./herdr.ts";
+import { isRecord, retryForever } from "./herdr.ts";
 
 const MAX_FRAME = 1024;
 const POLL_MS = 20;
@@ -12,12 +12,26 @@ export type DeckMessage =
   | { readonly t: "key"; readonly k: number; readonly down: boolean }
   | { readonly t: "encoder"; readonly delta: number };
 
+export type LedEffect = "breathe" | "blink";
+export type DeviceLed =
+  | readonly [red: number, green: number, blue: number]
+  | readonly [red: number, green: number, blue: number, effect: LedEffect];
+
+export type HeaderState = "w" | "i" | "b" | "d" | "u";
+
 export type HostMessage =
   | { readonly t: "hello"; readonly host: string }
   | {
       readonly t: "render";
-      readonly led: ReadonlyArray<readonly number[]>;
+      readonly led: ReadonlyArray<DeviceLed>;
       readonly text: readonly string[];
+      readonly hdr: {
+        readonly boxes: ReadonlyArray<HeaderState>;
+        readonly sel: number | null;
+        readonly page: number;
+        readonly pages: number;
+      };
+      readonly sleep?: true;
     }
   | { readonly t: "hid"; readonly key: string; readonly down: boolean };
 
@@ -260,13 +274,4 @@ const deckSession = (handlers: DeckHandlers) =>
   );
 
 export const watchDeck = (handlers: DeckHandlers): Effect.Effect<never, SerialError> =>
-  Effect.forever(
-    deckSession(handlers).pipe(
-      Effect.tapError((error) =>
-        Effect.sync(() => console.error(`${error.message}; reconnecting`)),
-      ),
-      Effect.retry(
-        Schedule.min([Schedule.exponential("250 millis"), Schedule.spaced("5 seconds")]),
-      ),
-    ),
-  );
+  retryForever(deckSession(handlers));

@@ -1,4 +1,4 @@
-import type { CommandAction, CommandKeys, LayerKeys } from "./config.ts";
+import type { CommandAction, CommandKeys, Config } from "./config.ts";
 import { PAGE_SIZE, projectFleet, type Agent } from "./projection.ts";
 import type { DeckMessage } from "./serial.ts";
 
@@ -6,12 +6,14 @@ export interface ControlState {
   readonly pageIndex: number;
   readonly selectedPaneId: string | undefined;
   readonly workspaceId: string | undefined;
-  readonly encoderMode: "workspaces" | "tabs";
+  readonly encoderMode: "workspaces" | "tabs" | "model";
   readonly tabId: string | undefined;
   readonly pressedCommandActions: Readonly<Partial<Record<keyof CommandKeys, CommandAction>>>;
 }
 
-export type ControlMessage = DeckMessage | { readonly t: "encoderTimeout" };
+export type ControlMessage =
+  | Exclude<DeckMessage, { readonly t: "hello" }>
+  | { readonly t: "encoderTimeout" };
 
 export type ControlEffect =
   | { readonly type: "focusAgent"; readonly paneId: string }
@@ -47,6 +49,9 @@ export function reconcileControls(
   };
 }
 
+export const isLayerHeld = (pressed: ControlState["pressedCommandActions"]): boolean =>
+  Object.values(pressed).some((action) => action.type === "layer");
+
 const sendSelected = (
   state: ControlState,
   keys: readonly string[],
@@ -60,8 +65,7 @@ export function reduceControlMessage(
   state: ControlState,
   message: ControlMessage,
   fleet: ReadonlyArray<Agent>,
-  commandKeys: CommandKeys,
-  layerKeys: LayerKeys,
+  config: Pick<Config, "commandKeys" | "layerKeys" | "layerEncoder">,
 ): { readonly state: ControlState; readonly effects: ReadonlyArray<ControlEffect> } {
   if (message.t === "encoderTimeout") {
     return {
@@ -69,9 +73,13 @@ export function reduceControlMessage(
       effects: [],
     };
   }
-  if (message.t === "hello") return { state, effects: [] };
   if (message.t === "encoder") {
     if (message.delta === 0) return { state, effects: [] };
+    if (state.encoderMode === "model") {
+      const binding = message.delta > 0 ? config.layerEncoder.cw : config.layerEncoder.ccw;
+      const keys = Array.from({ length: Math.abs(message.delta) }, () => binding).flat();
+      return { state, effects: sendSelected(state, keys) };
+    }
     return {
       state,
       effects: [
@@ -84,14 +92,18 @@ export function reduceControlMessage(
   }
   if (message.k === 12) {
     if (!message.down) return { state, effects: [] };
-    const enteringTabs = state.encoderMode === "workspaces";
+    const layerHeld = isLayerHeld(state.pressedCommandActions);
+    const nextMode =
+      state.encoderMode === "model"
+        ? "workspaces"
+        : layerHeld
+          ? "model"
+          : state.encoderMode === "workspaces"
+            ? "tabs"
+            : "workspaces";
     return {
-      state: {
-        ...state,
-        encoderMode: enteringTabs ? "tabs" : "workspaces",
-        tabId: undefined,
-      },
-      effects: enteringTabs ? [{ type: "enterTabMode" }] : [],
+      state: { ...state, encoderMode: nextMode, tabId: undefined },
+      effects: nextMode === "tabs" ? [{ type: "enterTabMode" }] : [],
     };
   }
 
@@ -120,10 +132,9 @@ export function reduceControlMessage(
   let action: CommandAction | undefined;
   let pressedCommandActions: Partial<Record<keyof CommandKeys, CommandAction>>;
   if (message.down) {
-    const layerHeld = Object.values(state.pressedCommandActions).some(
-      (pressed) => pressed.type === "layer",
-    );
-    action = layerHeld ? layerKeys[slot] : commandKeys[slot];
+    action = isLayerHeld(state.pressedCommandActions)
+      ? config.layerKeys[slot]
+      : config.commandKeys[slot];
     pressedCommandActions = { ...state.pressedCommandActions, [slot]: action };
   } else {
     action = state.pressedCommandActions[slot];

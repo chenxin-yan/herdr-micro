@@ -30,7 +30,6 @@ describe("loadConfig", () => {
   test("returns built-in defaults when the file is missing", async () => {
     const config = await Effect.runPromise(loadConfig(tempPath()));
     expect(config).toEqual(DEFAULT_CONFIG);
-    expect(config.encoderTimeoutSeconds).toBe(4);
   });
 
   test("rejects an incomplete provided file", async () => {
@@ -100,7 +99,10 @@ describe("loadConfig", () => {
       path,
       JSON.stringify({
         ...DEFAULT_CONFIG,
-        layerKeys: { ...DEFAULT_CONFIG.layerKeys, "1": { type: "layer" } },
+        layerKeys: {
+          ...DEFAULT_CONFIG.layerKeys,
+          "1": { type: "layer", color: "#00ffff" },
+        },
       }),
     );
 
@@ -115,7 +117,10 @@ describe("loadConfig", () => {
       path,
       JSON.stringify({
         ...DEFAULT_CONFIG,
-        commandKeys: { ...DEFAULT_CONFIG.commandKeys, "1": { type: "keyAlias", key: "NOT_A_KEY" } },
+        commandKeys: {
+          ...DEFAULT_CONFIG.commandKeys,
+          "1": { type: "keyAlias", key: "NOT_A_KEY", color: "#ffff00" },
+        },
       }),
     );
 

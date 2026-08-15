@@ -11,10 +11,8 @@ export interface Agent {
 
 interface FleetProjection {
   readonly pageIndex: number;
-  readonly pageNumber: number;
   readonly pageCount: number;
   readonly slots: ReadonlyArray<Agent>;
-  readonly overflow: number;
   readonly offPageState: AgentState | undefined;
 }
 
@@ -39,10 +37,8 @@ export function projectFleet(
 
   return {
     pageIndex,
-    pageNumber: pageIndex + 1,
     pageCount,
     slots: fleet.slice(start, end),
-    overflow: Math.max(0, fleet.length - end),
     offPageState: offPage.reduce<AgentState | undefined>(
       (highest, { state }) =>
         highest === undefined || PRIORITY[state] > PRIORITY[highest] ? state : highest,

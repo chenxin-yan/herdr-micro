@@ -12,6 +12,7 @@ import {
   listTabs,
   listWorkspaces,
   parseSnapshot,
+  readAgentVisible,
   readUntil,
   sendRequest,
   watchFleet,
@@ -180,7 +181,12 @@ test("one-shot Socket API requests list navigation and focus a newly created age
                 }
               : request.method === "tab.create"
                 ? { id: request.id, result: { root_pane: { pane_id: "p2" } } }
-                : { id: request.id, result: { type: "ok" } },
+                : request.method === "agent.read"
+                  ? {
+                      id: request.id,
+                      result: { type: "pane_read", read: { text: "pi status" } },
+                    }
+                  : { id: request.id, result: { type: "ok" } },
         )}\n`,
       );
     });
@@ -196,15 +202,18 @@ test("one-shot Socket API requests list navigation and focus a newly created age
       { id: "t2", number: 2, label: "t2", focused: false },
     ]);
     await Effect.runPromise(createAgent(path, "w1", "pi"));
+    expect(await Effect.runPromise(readAgentVisible(path, "p1"))).toBe("pi status");
     expect(requests.map(({ method }) => method)).toEqual([
       "agent.focus",
       "workspace.list",
       "tab.list",
       "tab.create",
       "pane.send_input",
+      "agent.read",
     ]);
     expect(requests[3]?.params).toEqual({ workspace_id: "w1", focus: true });
     expect(requests[4]?.params).toEqual({ pane_id: "p2", text: "pi", keys: ["enter"] });
+    expect(requests[5]?.params).toEqual({ target: "p1", source: "visible", strip_ansi: true });
   } finally {
     await new Promise<void>((resolve) => server.close(() => resolve()));
     rmSync(path, { force: true });

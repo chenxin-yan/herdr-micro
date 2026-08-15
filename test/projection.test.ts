@@ -14,10 +14,8 @@ describe("projectFleet", () => {
   test("projects an empty fleet as one empty page", () => {
     expect(projectFleet([], 0)).toEqual({
       pageIndex: 0,
-      pageNumber: 1,
       pageCount: 1,
       slots: [],
-      overflow: 0,
       offPageState: undefined,
     });
   });
@@ -33,7 +31,6 @@ describe("projectFleet", () => {
       "pane-5",
     ]);
     expect(projection.pageCount).toBe(1);
-    expect(projection.overflow).toBe(0);
     expect(projection.offPageState).toBeUndefined();
   });
 
@@ -44,7 +41,6 @@ describe("projectFleet", () => {
     const first = projectFleet(fleet, 0);
     expect(first.slots).toHaveLength(5);
     expect(first.pageCount).toBe(2);
-    expect(first.overflow).toBe(1);
     expect(first.offPageState).toBe("blocked");
 
     const second = projectFleet(fleet, 1);

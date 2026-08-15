@@ -334,6 +334,21 @@ export const listTabs = (
 ): Effect.Effect<ReadonlyArray<Tab>, HerdrError> =>
   requestParsed(path, "tab.list", parseTabList, { workspace_id: workspaceId });
 
+const AgentReadResponse = Schema.Struct({
+  result: Schema.Struct({
+    type: Schema.Literal("pane_read"),
+    read: Schema.Struct({ text: Schema.String }),
+  }),
+});
+
+export const readAgentVisible = (path: string, paneId: string): Effect.Effect<string, HerdrError> =>
+  requestParsed(
+    path,
+    "agent.read",
+    (response) => decode(AgentReadResponse, "agent.read")(response).result.read.text,
+    { target: paneId, source: "visible", strip_ansi: true },
+  );
+
 const TabCreateResponse = Schema.Struct({
   result: Schema.Struct({ root_pane: Schema.Struct({ pane_id: Schema.String }) }),
 });
@@ -406,6 +421,22 @@ function refreshOnce(
   });
 }
 
+// Retry inside forever so each successful cycle restarts the backoff at
+// 250 ms instead of accumulating toward the 5 s cap over the daemon's lifetime.
+export const retryForever = <A, E extends { readonly message: string }, R>(
+  effect: Effect.Effect<A, E, R>,
+): Effect.Effect<never, E, R> =>
+  Effect.forever(
+    effect.pipe(
+      Effect.tapError((error) =>
+        Effect.sync(() => console.error(`${error.message}; reconnecting`)),
+      ),
+      Effect.retry(
+        Schedule.min([Schedule.exponential("250 millis"), Schedule.spaced("5 seconds")]),
+      ),
+    ),
+  );
+
 export const watchFleet = (
   path: string,
   onSnapshot: (snapshot: FleetSnapshot) => void,
@@ -418,17 +449,5 @@ export const watchFleet = (
     previous = current;
     onSnapshot(snapshot);
   };
-  // Retry inside forever so each successful cycle (= a subscription event
-  // arrived) restarts the backoff at 250 ms instead of accumulating toward
-  // the 5 s cap over the daemon's lifetime.
-  return Effect.forever(
-    refreshOnce(path, emitChange, onRefresh).pipe(
-      Effect.tapError((error) =>
-        Effect.sync(() => console.error(`${error.message}; reconnecting`)),
-      ),
-      Effect.retry(
-        Schedule.min([Schedule.exponential("250 millis"), Schedule.spaced("5 seconds")]),
-      ),
-    ),
-  );
+  return retryForever(refreshOnce(path, emitChange, onRefresh));
 };

@@ -32,24 +32,34 @@ const HID_KEYS: readonly string[] = [
     .split(/\s+/),
 ];
 
+const HexColor = Schema.String.check(Schema.isPattern(/^#[0-9a-fA-F]{6}$/));
 const RegularCommandAction = Schema.Union([
   Schema.Struct({ type: Schema.Literal("none") }),
-  Schema.Struct({ type: Schema.Literal("newAgent") }),
-  Schema.Struct({ type: Schema.Literal("closeTab") }),
+  Schema.Struct({ type: Schema.Literal("newAgent"), color: HexColor }),
+  Schema.Struct({ type: Schema.Literal("closeTab"), color: HexColor }),
   Schema.Struct({
     type: Schema.Literal("sendKeys"),
     keys: Schema.NonEmptyArray(Schema.NonEmptyString),
+    color: HexColor,
   }),
-  Schema.Struct({ type: Schema.Literal("keyAlias"), key: Schema.Literals(HID_KEYS) }),
+  Schema.Struct({
+    type: Schema.Literal("keyAlias"),
+    key: Schema.Literals(HID_KEYS),
+    color: HexColor,
+  }),
 ]);
 const CommandAction = Schema.Union([
   RegularCommandAction,
-  Schema.Struct({ type: Schema.Literal("layer") }),
+  Schema.Struct({ type: Schema.Literal("layer"), color: HexColor }),
 ]);
-const HexColor = Schema.String.check(Schema.isPattern(/^#[0-9a-fA-F]{6}$/));
 const ConfigSchema = Schema.Struct({
   defaultAgentCommand: Schema.Array(Schema.String),
   encoderTimeoutSeconds: Schema.Finite.check(Schema.isGreaterThan(0)),
+  screensaverMinutes: Schema.Finite.check(Schema.isGreaterThan(0)),
+  layerEncoder: Schema.Struct({
+    cw: Schema.NonEmptyArray(Schema.NonEmptyString),
+    ccw: Schema.NonEmptyArray(Schema.NonEmptyString),
+  }),
   commandKeys: Schema.Struct({
     "1": CommandAction,
     "2": CommandAction,
@@ -81,26 +91,31 @@ const ConfigSchema = Schema.Struct({
 export type Config = typeof ConfigSchema.Type;
 export type CommandAction = typeof CommandAction.Type;
 export type CommandKeys = Config["commandKeys"];
-export type LayerKeys = Config["layerKeys"];
 
 export const DEFAULT_CONFIG: Config = {
   defaultAgentCommand: ["pi"],
   encoderTimeoutSeconds: 4,
+  screensaverMinutes: 10,
+  layerEncoder: {
+    cw: ["ctrl+p"],
+    ccw: ["shift+ctrl+p"],
+  },
   commandKeys: {
-    "1": { type: "sendKeys", keys: ["ctrl+c"] },
-    "2": { type: "sendKeys", keys: ["esc"] },
-    "3": { type: "layer" },
-    "4": { type: "keyAlias", key: "RIGHT_GUI" },
-    "5": { type: "sendKeys", keys: ["enter"] },
-    "6": { type: "sendKeys", keys: ["alt+enter"] },
+    "1": { type: "sendKeys", keys: ["ctrl+c"], color: "#ff8800" },
+    "2": { type: "sendKeys", keys: ["esc"], color: "#ff8800" },
+    // The held Layer key keeps this cyan binding color while the other LEDs show layerKeys.
+    "3": { type: "layer", color: "#00ffff" },
+    "4": { type: "keyAlias", key: "RIGHT_GUI", color: "#ffff00" },
+    "5": { type: "sendKeys", keys: ["enter"], color: "#ff8800" },
+    "6": { type: "sendKeys", keys: ["alt+enter"], color: "#ff8800" },
   },
   layerKeys: {
-    "1": { type: "newAgent" },
-    "2": { type: "closeTab" },
+    "1": { type: "newAgent", color: "#00ffff" },
+    "2": { type: "closeTab", color: "#ff8800" },
     "3": { type: "none" },
-    "4": { type: "none" },
-    "5": { type: "none" },
-    "6": { type: "none" },
+    "4": { type: "sendKeys", keys: ["left"], color: "#ffff00" },
+    "5": { type: "sendKeys", keys: ["right"], color: "#ffff00" },
+    "6": { type: "sendKeys", keys: ["shift+tab"], color: "#ff8800" },
   },
   appearance: {
     brightness: 0.2,

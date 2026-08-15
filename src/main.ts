@@ -2,7 +2,7 @@
 import { homedir } from "node:os";
 
 import { BunRuntime, BunServices } from "@effect/platform-bun";
-import { Effect } from "effect";
+import { Effect, Fiber, Schedule } from "effect";
 import { Command, Flag } from "effect/unstable/cli";
 
 import { version } from "../package.json";
@@ -10,6 +10,7 @@ import { configFileExists, initializeConfig, loadConfig, type Config } from "./c
 import {
   cycleNumbered,
   initialControlState,
+  isLayerHeld,
   reconcileControls,
   reduceControlMessage,
   shellCommand,
@@ -20,13 +21,26 @@ import {
   createAgent,
   listTabs,
   listWorkspaces,
+  readAgentVisible,
   sendRequest,
   watchFleet,
   type Tab,
   type Workspace,
 } from "./herdr.ts";
+import {
+  initialScreensaverState,
+  reconcileScreensaver,
+  syncStateSince,
+  type AgentStateSince,
+} from "./presentation.ts";
 import type { Agent } from "./projection.ts";
-import { buildRender, LatestRenderQueue } from "./render.ts";
+import {
+  buildRender,
+  LatestRenderQueue,
+  parsePiStatus,
+  type EncoderModeRender,
+  type PiStatus,
+} from "./render.ts";
 import { watchDeck, type DeckMessage, type DeckWriter } from "./serial.ts";
 
 const HERDR_SOCKET = `${homedir()}/.config/herdr/herdr.sock`;
@@ -56,6 +70,8 @@ interface AppState {
   controls: ControlState;
   workspaces: ReadonlyArray<Workspace>;
   tabs: ReadonlyArray<Tab>;
+  selectedDetail: { readonly paneId: string; readonly value: PiStatus | undefined } | undefined;
+  sleeping: boolean;
   active: ActiveDeck | undefined;
 }
 
@@ -69,9 +85,11 @@ const hostProgram = (config: Config) =>
       controls: initialControlState,
       workspaces: [],
       tabs: [],
+      selectedDetail: undefined,
+      sleeping: false,
       active: undefined,
     };
-
+    const stateSince = new Map<string, AgentStateSince>();
     const enqueueRender = () => {
       if (!state.active?.live) return;
       const currentWorkspace = state.workspaces.find(({ id }) => id === state.controls.workspaceId);
@@ -79,22 +97,37 @@ const hostProgram = (config: Config) =>
       const currentTab =
         orderedTabs.find(({ id }) => id === state.controls.tabId) ??
         orderedTabs.find(({ focused }) => focused);
-      const tabMode =
-        state.controls.encoderMode === "tabs" && currentTab
-          ? {
-              label: currentTab.label,
-              index: orderedTabs.indexOf(currentTab),
-              count: orderedTabs.length,
-            }
-          : undefined;
+      const encoder: EncoderModeRender = {
+        mode: state.controls.encoderMode,
+        tab:
+          state.controls.encoderMode === "tabs" && currentTab
+            ? {
+                label: currentTab.label,
+                index: orderedTabs.indexOf(currentTab),
+                count: orderedTabs.length,
+              }
+            : undefined,
+      };
+      const layerHeld = isLayerHeld(state.controls.pressedCommandActions);
+      const selectedPaneId = state.controls.selectedPaneId;
+      const selectedDetail = state.selectedDetail;
       state.active.renders.enqueue(
         buildRender(
           state.fleet,
           state.controls.pageIndex,
-          state.controls.selectedPaneId,
-          currentWorkspace?.label ?? currentWorkspace?.id,
-          tabMode,
+          selectedPaneId,
+          currentWorkspace?.label,
+          encoder,
+          layerHeld,
           config,
+          {
+            selectedStateSince: selectedPaneId ? stateSince.get(selectedPaneId)?.since : undefined,
+            detail:
+              selectedDetail && selectedDetail.paneId === selectedPaneId
+                ? selectedDetail.value
+                : undefined,
+            sleep: state.sleeping,
+          },
         ),
       );
     };
@@ -119,26 +152,96 @@ const hostProgram = (config: Config) =>
       ),
     );
 
-    let tabModeTimer: ReturnType<typeof setTimeout> | undefined;
-    const clearTabModeTimer = () => {
-      if (tabModeTimer) clearTimeout(tabModeTimer);
-      tabModeTimer = undefined;
+    let detailFiber: Fiber.Fiber<unknown, unknown> | undefined;
+    const stopDetailPolling = () => {
+      // Interrupting the fiber also cancels any in-flight read, so a stale
+      // response can never write state for a previously selected pane.
+      if (detailFiber) Effect.runFork(Fiber.interrupt(detailFiber));
+      detailFiber = undefined;
     };
-    const leaveTabMode = () => {
-      clearTabModeTimer();
+    const restartDetailPolling = () => {
+      stopDetailPolling();
+      state.selectedDetail = undefined;
+      const paneId = state.controls.selectedPaneId;
+      if (!paneId || !state.active?.live) return;
+      let failureLogged = false;
+      const poll = readAgentVisible(HERDR_SOCKET, paneId).pipe(
+        Effect.map(parsePiStatus),
+        // A wedged pane must blank the detail line, not freeze the last good
+        // parse; log the failure once per selected pane and keep polling.
+        Effect.catch((cause) =>
+          Effect.sync(() => {
+            if (!failureLogged) {
+              failureLogged = true;
+              console.error(`Cannot read selected agent detail: ${String(cause)}`);
+            }
+            return undefined;
+          }),
+        ),
+        Effect.tap((value) =>
+          Effect.sync(() => {
+            state.selectedDetail = { paneId, value };
+            enqueueRender(); // The same cadence keeps the selected state duration live.
+          }),
+        ),
+      );
+      detailFiber = Effect.runFork(poll.pipe(Effect.repeat(Schedule.spaced("3 seconds"))));
+    };
+    const syncDetailPolling = (previousPaneId: string | undefined) => {
+      if (state.controls.selectedPaneId === previousPaneId) return;
+      restartDetailPolling();
+    };
+
+    let screensaverTimer: ReturnType<typeof setTimeout> | undefined;
+    let screensaverState = initialScreensaverState;
+    const screensaverTimeoutMs = config.screensaverMinutes * 60_000;
+    const clearScreensaverTimer = () => {
+      if (screensaverTimer) clearTimeout(screensaverTimer);
+      screensaverTimer = undefined;
+    };
+    const syncScreensaver = (activity = false) => {
+      clearScreensaverTimer();
+      const wasSleeping = state.sleeping;
+      const now = Date.now();
+      screensaverState = reconcileScreensaver(
+        screensaverState,
+        state.fleet,
+        now,
+        screensaverTimeoutMs,
+        activity,
+      );
+      state.sleeping = screensaverState.sleeping;
+      if (screensaverState.idleSince !== undefined && !screensaverState.sleeping) {
+        const remaining = screensaverTimeoutMs - (now - screensaverState.idleSince);
+        screensaverTimer = setTimeout(syncScreensaver, Math.max(1, remaining));
+      }
+      if (wasSleeping !== state.sleeping) enqueueRender();
+    };
+    const noteActivity = () => syncScreensaver(true);
+    const syncFleetPresentationState = (fleet: ReadonlyArray<Agent>) => {
+      syncStateSince(stateSince, fleet, Date.now());
+      syncScreensaver();
+    };
+
+    let encoderModeTimer: ReturnType<typeof setTimeout> | undefined;
+    const clearEncoderModeTimer = () => {
+      if (encoderModeTimer) clearTimeout(encoderModeTimer);
+      encoderModeTimer = undefined;
+    };
+    const leaveEncoderMode = () => {
+      clearEncoderModeTimer();
       state.controls = reduceControlMessage(
         state.controls,
         { t: "encoderTimeout" },
         state.fleet,
-        config.commandKeys,
-        config.layerKeys,
+        config,
       ).state;
       state.tabs = [];
       enqueueRender();
     };
-    const armTabModeTimer = () => {
-      clearTabModeTimer();
-      tabModeTimer = setTimeout(leaveTabMode, config.encoderTimeoutSeconds * 1_000);
+    const armEncoderModeTimer = () => {
+      clearEncoderModeTimer();
+      encoderModeTimer = setTimeout(leaveEncoderMode, config.encoderTimeoutSeconds * 1_000);
     };
 
     const execute = (effect: ControlEffect, deck: DeckWriter): Effect.Effect<void, never> => {
@@ -221,14 +324,23 @@ const hostProgram = (config: Config) =>
     };
 
     const handleHello = (active: ActiveDeck, fw: string): Effect.Effect<void, never> => {
+      const becameLive = !active.live && fw === version;
       active.live = fw === version;
+      // A Deck auto-reload emits hello on the still-open port (no disconnect fires);
+      // key-up events from before the reload are gone, so discard captured actions.
+      state.controls = { ...state.controls, pressedCommandActions: {} };
       if (!active.live) {
         console.error(
           `Deck app version ${fw} does not match host ${version}; redeploy the Device Bundle`,
         );
       }
       return active.deck.write({ t: "hello", host: version }).pipe(
-        Effect.tap(() => Effect.sync(enqueueRender)),
+        Effect.tap(() =>
+          Effect.sync(() => {
+            if (becameLive) restartDetailPolling();
+            enqueueRender();
+          }),
+        ),
         Effect.catch(logFailure),
       );
     };
@@ -254,23 +366,19 @@ const hostProgram = (config: Config) =>
 
         // Desk debugging: deck events are low-rate, so tracing stays on.
         console.error(`deck ${JSON.stringify(message)}`);
+        noteActivity();
         const previousMode = state.controls.encoderMode;
-        const reduced = reduceControlMessage(
-          state.controls,
-          message,
-          state.fleet,
-          config.commandKeys,
-          config.layerKeys,
-        );
+        const reduced = reduceControlMessage(state.controls, message, state.fleet, config);
         state.controls = reduced.state;
         for (const effect of reduced.effects) console.error(`  -> ${JSON.stringify(effect)}`);
         if (
-          state.controls.encoderMode === "tabs" &&
-          (message.t === "encoder" || (message.t === "key" && message.k === 12))
+          state.controls.encoderMode !== "workspaces" &&
+          ((message.t === "encoder" && message.delta !== 0) ||
+            (message.t === "key" && message.k === 12 && message.down))
         ) {
-          armTabModeTimer();
-        } else if (previousMode === "tabs" && state.controls.encoderMode === "workspaces") {
-          clearTabModeTimer();
+          armEncoderModeTimer();
+        } else if (previousMode !== "workspaces" && state.controls.encoderMode === "workspaces") {
+          clearEncoderModeTimer();
           state.tabs = [];
         }
         enqueueRender();
@@ -283,7 +391,8 @@ const hostProgram = (config: Config) =>
           if (state.active?.deck !== deck) return;
           state.active.renders.clear();
           state.active = undefined;
-          leaveTabMode();
+          stopDetailPolling();
+          leaveEncoderMode();
           // Key-up events are not replayed after reconnect, so discard captured actions.
           state.controls = { ...state.controls, pressedCommandActions: {} };
           console.error("Deck disconnected");
@@ -295,12 +404,15 @@ const hostProgram = (config: Config) =>
         watchFleet(
           HERDR_SOCKET,
           (snapshot) => {
+            const previousPaneId = state.controls.selectedPaneId;
             state.fleet = snapshot.fleet;
+            syncFleetPresentationState(snapshot.fleet);
             state.controls = reconcileControls(
               state.controls,
               snapshot.fleet,
               snapshot.focusedPaneId,
             );
+            syncDetailPolling(previousPaneId);
             enqueueRender();
           },
           () => refreshWorkspaces,
