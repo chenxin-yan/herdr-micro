@@ -64,13 +64,13 @@ export function reduceControlMessage(
   if (message.t === "hello") return { state, effects: [] };
   if (message.t === "encoder") {
     if (message.delta === 0) return { state, effects: [] };
-    const delta = -message.delta;
     return {
       state,
       effects: [
+        // Workspace rotation is inverted (user preference); tab rotation is not.
         state.encoderMode === "tabs"
-          ? { type: "selectTab", delta }
-          : { type: "selectWorkspace", delta },
+          ? { type: "selectTab", delta: message.delta }
+          : { type: "selectWorkspace", delta: -message.delta },
       ],
     };
   }

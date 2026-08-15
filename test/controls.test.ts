@@ -94,7 +94,7 @@ describe("reduceControlMessage", () => {
         [],
         DEFAULT_CONFIG.commandKeys,
       ).effects,
-    ).toEqual([{ type: "selectTab", delta: -1 }]);
+    ).toEqual([{ type: "selectTab", delta: 1 }]);
     expect(press(entered.state, 12, []).state.encoderMode).toBe("workspaces");
     expect(
       reduceControlMessage(entered.state, { t: "encoderTimeout" }, [], DEFAULT_CONFIG.commandKeys)
