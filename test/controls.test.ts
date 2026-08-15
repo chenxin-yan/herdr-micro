@@ -1,13 +1,13 @@
 import { describe, expect, test } from "bun:test";
 
-import { DEFAULT_CONFIG } from "../src/config.ts";
+import { DEFAULT_CONFIG, type CommandKeys, type LayerKeys } from "../src/config.ts";
 import {
-  cycleTab,
-  cycleWorkspace,
+  cycleNumbered,
   initialControlState,
   reconcileControls,
   reduceControlMessage,
   shellCommand,
+  type ControlMessage,
   type ControlState,
 } from "../src/controls.ts";
 import type { Tab, Workspace } from "../src/herdr.ts";
@@ -21,19 +21,30 @@ const agent = (index: number, state: Agent["state"] = "idle"): Agent => ({
   tabId: `t${index}`,
 });
 
+interface Maps {
+  readonly commandKeys?: CommandKeys;
+  readonly layerKeys?: LayerKeys;
+}
+const reduce = (
+  state: ControlState,
+  message: ControlMessage,
+  fleet: ReadonlyArray<Agent> = [],
+  maps: Maps = {},
+) =>
+  reduceControlMessage(
+    state,
+    message,
+    fleet,
+    maps.commandKeys ?? DEFAULT_CONFIG.commandKeys,
+    maps.layerKeys ?? DEFAULT_CONFIG.layerKeys,
+  );
 const key = (
   state: ControlState,
   physicalKey: number,
   down: boolean,
   fleet: ReadonlyArray<Agent>,
-) =>
-  reduceControlMessage(
-    state,
-    { t: "key", k: physicalKey, down },
-    fleet,
-    DEFAULT_CONFIG.commandKeys,
-    DEFAULT_CONFIG.layerKeys,
-  );
+  maps?: Maps,
+) => reduce(state, { t: "key", k: physicalKey, down }, fleet, maps);
 const press = (state: ControlState, physicalKey: number, fleet: ReadonlyArray<Agent>) =>
   key(state, physicalKey, true, fleet);
 
@@ -62,15 +73,9 @@ describe("reduceControlMessage", () => {
     expect(press(selected, 8, [agent(1)]).effects).toEqual([]);
     const aliasDown = press(selected, 9, [agent(1)]);
     expect(aliasDown.effects).toEqual([{ type: "hid", key: "RIGHT_GUI", down: true }]);
-    expect(
-      reduceControlMessage(
-        aliasDown.state,
-        { t: "key", k: 9, down: false },
-        [agent(1)],
-        DEFAULT_CONFIG.commandKeys,
-        DEFAULT_CONFIG.layerKeys,
-      ).effects,
-    ).toEqual([{ type: "hid", key: "RIGHT_GUI", down: false }]);
+    expect(key(aliasDown.state, 9, false, [agent(1)]).effects).toEqual([
+      { type: "hid", key: "RIGHT_GUI", down: false },
+    ]);
     expect(press(selected, 10, [agent(1)]).effects).toEqual([
       { type: "sendKeys", paneId: "p1", keys: ["enter"] },
     ]);
@@ -99,37 +104,13 @@ describe("reduceControlMessage", () => {
       ...DEFAULT_CONFIG.layerKeys,
       "4": { type: "keyAlias" as const, key: "RIGHT_SHIFT" as const },
     };
-    const layerDown = reduceControlMessage(
-      initialControlState,
-      { t: "key", k: 8, down: true },
-      fleet,
-      DEFAULT_CONFIG.commandKeys,
-      layerKeys,
-    );
-    const aliasDown = reduceControlMessage(
-      layerDown.state,
-      { t: "key", k: 9, down: true },
-      fleet,
-      DEFAULT_CONFIG.commandKeys,
-      layerKeys,
-    );
+    const layerDown = key(initialControlState, 8, true, fleet, { layerKeys });
+    const aliasDown = key(layerDown.state, 9, true, fleet, { layerKeys });
     expect(aliasDown.effects).toEqual([{ type: "hid", key: "RIGHT_SHIFT", down: true }]);
-    const layerUp = reduceControlMessage(
-      aliasDown.state,
-      { t: "key", k: 8, down: false },
-      fleet,
-      DEFAULT_CONFIG.commandKeys,
-      layerKeys,
-    );
-    expect(
-      reduceControlMessage(
-        layerUp.state,
-        { t: "key", k: 9, down: false },
-        fleet,
-        DEFAULT_CONFIG.commandKeys,
-        layerKeys,
-      ).effects,
-    ).toEqual([{ type: "hid", key: "RIGHT_SHIFT", down: false }]);
+    const layerUp = key(aliasDown.state, 8, false, fleet, { layerKeys });
+    expect(key(layerUp.state, 9, false, fleet, { layerKeys }).effects).toEqual([
+      { type: "hid", key: "RIGHT_SHIFT", down: false },
+    ]);
   });
 
   test("forwards a configured Send Keys sequence unchanged", () => {
@@ -138,15 +119,9 @@ describe("reduceControlMessage", () => {
       ...DEFAULT_CONFIG.commandKeys,
       "3": { type: "sendKeys" as const, keys: ["esc", "ctrl+c"] as const },
     };
-    expect(
-      reduceControlMessage(
-        selected,
-        { t: "key", k: 8, down: true },
-        [agent(1)],
-        commandKeys,
-        DEFAULT_CONFIG.layerKeys,
-      ).effects,
-    ).toEqual([{ type: "sendKeys", paneId: "p1", keys: ["esc", "ctrl+c"] }]);
+    expect(key(selected, 8, true, [agent(1)], { commandKeys }).effects).toEqual([
+      { type: "sendKeys", paneId: "p1", keys: ["esc", "ctrl+c"] },
+    ]);
   });
 
   test("logs selected-agent actions without a selection instead of acting", () => {
@@ -162,15 +137,9 @@ describe("reduceControlMessage", () => {
   });
 
   test("flips encoder direction in Workspace mode", () => {
-    expect(
-      reduceControlMessage(
-        initialControlState,
-        { t: "encoder", delta: -1 },
-        [],
-        DEFAULT_CONFIG.commandKeys,
-        DEFAULT_CONFIG.layerKeys,
-      ).effects,
-    ).toEqual([{ type: "selectWorkspace", delta: 1 }]);
+    expect(reduce(initialControlState, { t: "encoder", delta: -1 }).effects).toEqual([
+      { type: "selectWorkspace", delta: 1 },
+    ]);
   });
 
   test("toggles Tab mode, flips rotation, and exits on timeout or another press", () => {
@@ -179,25 +148,11 @@ describe("reduceControlMessage", () => {
       state: { ...initialControlState, encoderMode: "tabs" },
       effects: [{ type: "enterTabMode" }],
     });
-    expect(
-      reduceControlMessage(
-        entered.state,
-        { t: "encoder", delta: 1 },
-        [],
-        DEFAULT_CONFIG.commandKeys,
-        DEFAULT_CONFIG.layerKeys,
-      ).effects,
-    ).toEqual([{ type: "selectTab", delta: 1 }]);
+    expect(reduce(entered.state, { t: "encoder", delta: 1 }).effects).toEqual([
+      { type: "selectTab", delta: 1 },
+    ]);
     expect(press(entered.state, 12, []).state.encoderMode).toBe("workspaces");
-    expect(
-      reduceControlMessage(
-        entered.state,
-        { t: "encoderTimeout" },
-        [],
-        DEFAULT_CONFIG.commandKeys,
-        DEFAULT_CONFIG.layerKeys,
-      ).state.encoderMode,
-    ).toBe("workspaces");
+    expect(reduce(entered.state, { t: "encoderTimeout" }).state.encoderMode).toBe("workspaces");
   });
 });
 
@@ -211,7 +166,7 @@ test("reconcileControls derives selection from Herdr focus and clamps a removed 
   expect(reconcileControls(state, [agent(1)], undefined)).toEqual(initialControlState);
 });
 
-test("cycleWorkspace and cycleTab follow Herdr numbers with wraparound", () => {
+test("cycleNumbered follows Herdr numbers with wraparound", () => {
   const workspaces: Workspace[] = [
     { id: "w2", number: 2, label: "two", focused: false, activeTabId: "t2" },
     { id: "w1", number: 1, label: "one", focused: true, activeTabId: "t1" },
@@ -220,8 +175,8 @@ test("cycleWorkspace and cycleTab follow Herdr numbers with wraparound", () => {
     { id: "t2", number: 2, label: "two", focused: false },
     { id: "t1", number: 1, label: "one", focused: true },
   ];
-  expect(cycleWorkspace(workspaces, "w1", 1)?.id).toBe("w2");
-  expect(cycleTab(tabs, "t1", -1)?.id).toBe("t2");
+  expect(cycleNumbered(workspaces, "w1", 1)?.id).toBe("w2");
+  expect(cycleNumbered(tabs, "t1", -1)?.id).toBe("t2");
 });
 
 test("shellCommand preserves configured argv boundaries", () => {

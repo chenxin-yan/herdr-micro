@@ -69,7 +69,6 @@ for _ in $(seq 60); do
   if [[ "$n" -ge 2 ]]; then
     echo "verify OK: $n ports:"
     ls /dev/cu.usbmodem*
-    grep -q "boot.py output" "$DEST/boot_out.txt" 2>/dev/null && echo "boot_out.txt: $(tail -1 "$DEST/boot_out.txt")"
     exit 0
   fi
   sleep 1

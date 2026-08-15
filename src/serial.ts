@@ -193,11 +193,7 @@ export interface DeckWriter {
   readonly write: (message: HostMessage) => Effect.Effect<void, SerialError>;
 }
 
-interface SerialPortApi extends DeckWriter {
-  readonly messages: Stream.Stream<DeckMessage, SerialError>;
-}
-
-const makeSerialPort = ({ fd, path, fw }: OpenDeck): SerialPortApi => {
+const makeSerialPort = ({ fd, path, fw }: OpenDeck) => {
   let writes = Promise.resolve();
   const write = (message: HostMessage) =>
     Effect.tryPromise({

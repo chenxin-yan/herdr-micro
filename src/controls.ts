@@ -1,5 +1,4 @@
 import type { CommandAction, CommandKeys, LayerKeys } from "./config.ts";
-import type { Tab, Workspace } from "./herdr.ts";
 import { PAGE_SIZE, projectFleet, type Agent } from "./projection.ts";
 import type { DeckMessage } from "./serial.ts";
 
@@ -151,7 +150,7 @@ export function reduceControlMessage(
   }
 }
 
-const cycleNumbered = <
+export const cycleNumbered = <
   A extends { readonly id: string; readonly number: number; readonly focused: boolean },
 >(
   values: ReadonlyArray<A>,
@@ -166,18 +165,6 @@ const cycleNumbered = <
   const index = (((start + delta) % ordered.length) + ordered.length) % ordered.length;
   return ordered[index];
 };
-
-export const cycleWorkspace = (
-  workspaces: ReadonlyArray<Workspace>,
-  currentId: string | undefined,
-  delta: number,
-): Workspace | undefined => cycleNumbered(workspaces, currentId, delta);
-
-export const cycleTab = (
-  tabs: ReadonlyArray<Tab>,
-  currentId: string | undefined,
-  delta: number,
-): Tab | undefined => cycleNumbered(tabs, currentId, delta);
 
 export const shellCommand = (argv: readonly string[]): string =>
   argv

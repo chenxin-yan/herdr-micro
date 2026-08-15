@@ -1,7 +1,7 @@
 import { createConnection, type Socket } from "node:net";
 import { StringDecoder } from "node:string_decoder";
 
-import { Data, Effect, Schedule } from "effect";
+import { Data, Effect, Result, Schedule, Schema, SchemaIssue } from "effect";
 
 import { AGENT_STATES, type Agent } from "./projection.ts";
 
@@ -34,69 +34,63 @@ export class HerdrError extends Data.TaggedError("HerdrError")<{
 export const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null;
 
+const formatIssue = SchemaIssue.makeFormatterDefault();
+
+const decode =
+  <S extends Schema.ConstraintDecoder<unknown>>(schema: S, label: string) =>
+  (input: unknown): S["Type"] => {
+    const result = Schema.decodeUnknownResult(schema)(input);
+    if (Result.isFailure(result)) {
+      throw new HerdrError({
+        message: `Invalid ${label} response: ${formatIssue(result.failure.issue)}`,
+      });
+    }
+    return result.success;
+  };
+
+const OptionalString = Schema.optional(Schema.NullOr(Schema.String));
+
 export interface FleetSnapshot {
   readonly fleet: ReadonlyArray<Agent>;
   readonly focusedPaneId: string | undefined;
 }
 
-export function parseSnapshot(input: unknown): FleetSnapshot {
-  if (
-    !isRecord(input) ||
-    !isRecord(input.result) ||
-    !isRecord(input.result.snapshot) ||
-    !Array.isArray(input.result.snapshot.agents)
-  ) {
-    throw new HerdrError({ message: "Invalid session.snapshot response" });
-  }
-  const focusedPaneId = input.result.snapshot.focused_pane_id;
-  if (focusedPaneId !== undefined && focusedPaneId !== null && typeof focusedPaneId !== "string") {
-    throw new HerdrError({ message: "Invalid focused_pane_id in session.snapshot response" });
-  }
+const SnapshotResponse = Schema.Struct({
+  result: Schema.Struct({
+    snapshot: Schema.Struct({
+      focused_pane_id: OptionalString,
+      agents: Schema.Array(
+        Schema.Struct({
+          pane_id: Schema.String,
+          workspace_id: Schema.String,
+          tab_id: Schema.String,
+          agent_status: Schema.String,
+          display_agent: OptionalString,
+          name: OptionalString,
+          agent: OptionalString,
+        }),
+      ),
+    }),
+  }),
+});
 
-  const fleet = input.result.snapshot.agents.map((value) => {
-    if (
-      !isRecord(value) ||
-      typeof value.pane_id !== "string" ||
-      typeof value.workspace_id !== "string" ||
-      typeof value.tab_id !== "string" ||
-      typeof value.agent_status !== "string"
-    ) {
-      throw new HerdrError({ message: "Invalid agent in session.snapshot response" });
-    }
-    const status = value.agent_status;
-    const name =
-      [value.display_agent, value.name, value.agent].find(
-        (part): part is string => typeof part === "string",
-      ) ?? value.pane_id;
-    return {
-      paneId: value.pane_id,
-      workspaceId: value.workspace_id,
-      tabId: value.tab_id,
-      name,
-      // A status Herdr adds later renders as "unknown" instead of turning
-      // the retry loop into a permanent failure.
-      state: AGENT_STATES.find((state) => state === status) ?? "unknown",
-    };
-  });
-  return { fleet, focusedPaneId: focusedPaneId ?? undefined };
+export function parseSnapshot(input: unknown): FleetSnapshot {
+  const { snapshot } = decode(SnapshotResponse, "session.snapshot")(input).result;
+  const fleet = snapshot.agents.map((value) => ({
+    paneId: value.pane_id,
+    workspaceId: value.workspace_id,
+    tabId: value.tab_id,
+    name: value.display_agent ?? value.name ?? value.agent ?? value.pane_id,
+    // A status Herdr adds later renders as "unknown" instead of turning
+    // the retry loop into a permanent failure.
+    state: AGENT_STATES.find((state) => state === value.agent_status) ?? "unknown",
+  }));
+  return { fleet, focusedPaneId: snapshot.focused_pane_id ?? undefined };
 }
 
 export function connect(path: string): Effect.Effect<Socket, HerdrError> {
   return Effect.callback<Socket, HerdrError>((resume) => {
-    let socket: Socket;
-    try {
-      socket = createConnection(path);
-    } catch (cause) {
-      resume(
-        Effect.fail(
-          new HerdrError({
-            message: `Cannot connect to Herdr at ${path}: ${String(cause)}`,
-          }),
-        ),
-      );
-      return;
-    }
-
+    const socket = createConnection(path);
     const cleanup = () => {
       socket.off("connect", onConnect);
       socket.off("error", onError);
@@ -281,44 +275,55 @@ export interface Tab {
   readonly focused: boolean;
 }
 
-function parseWorkspaceList(input: unknown): ReadonlyArray<Workspace> {
-  if (!isRecord(input) || !isRecord(input.result) || !Array.isArray(input.result.workspaces)) {
-    throw new HerdrError({ message: "Invalid workspace.list response" });
-  }
-  return input.result.workspaces.map((value) => {
-    if (
-      !isRecord(value) ||
-      typeof value.workspace_id !== "string" ||
-      typeof value.number !== "number"
-    ) {
-      throw new HerdrError({ message: "Invalid workspace in workspace.list response" });
-    }
-    return {
-      id: value.workspace_id,
-      number: value.number,
-      label: typeof value.label === "string" ? value.label : value.workspace_id,
-      focused: value.focused === true,
-      activeTabId: typeof value.active_tab_id === "string" ? value.active_tab_id : undefined,
-    };
-  });
-}
+const WorkspaceListResponse = Schema.Struct({
+  result: Schema.Struct({
+    workspaces: Schema.Array(
+      Schema.Struct({
+        workspace_id: Schema.String,
+        number: Schema.Number,
+        label: OptionalString,
+        focused: Schema.optional(Schema.NullOr(Schema.Boolean)),
+        active_tab_id: OptionalString,
+      }),
+    ),
+  }),
+});
 
-function parseTabList(input: unknown): ReadonlyArray<Tab> {
-  if (!isRecord(input) || !isRecord(input.result) || !Array.isArray(input.result.tabs)) {
-    throw new HerdrError({ message: "Invalid tab.list response" });
-  }
-  return input.result.tabs.map((value) => {
-    if (!isRecord(value) || typeof value.tab_id !== "string" || typeof value.number !== "number") {
-      throw new HerdrError({ message: "Invalid tab in tab.list response" });
-    }
-    return {
-      id: value.tab_id,
-      number: value.number,
-      label: typeof value.label === "string" ? value.label : value.tab_id,
-      focused: value.focused === true,
-    };
-  });
-}
+const parseWorkspaceList = (input: unknown): ReadonlyArray<Workspace> =>
+  decode(
+    WorkspaceListResponse,
+    "workspace.list",
+  )(input).result.workspaces.map((value) => ({
+    id: value.workspace_id,
+    number: value.number,
+    label: value.label ?? value.workspace_id,
+    focused: value.focused ?? false,
+    activeTabId: value.active_tab_id ?? undefined,
+  }));
+
+const TabListResponse = Schema.Struct({
+  result: Schema.Struct({
+    tabs: Schema.Array(
+      Schema.Struct({
+        tab_id: Schema.String,
+        number: Schema.Number,
+        label: OptionalString,
+        focused: Schema.optional(Schema.NullOr(Schema.Boolean)),
+      }),
+    ),
+  }),
+});
+
+const parseTabList = (input: unknown): ReadonlyArray<Tab> =>
+  decode(
+    TabListResponse,
+    "tab.list",
+  )(input).result.tabs.map((value) => ({
+    id: value.tab_id,
+    number: value.number,
+    label: value.label ?? value.tab_id,
+    focused: value.focused ?? false,
+  }));
 
 export const listWorkspaces = (path: string): Effect.Effect<ReadonlyArray<Workspace>, HerdrError> =>
   requestParsed(path, "workspace.list", parseWorkspaceList);
@@ -329,24 +334,22 @@ export const listTabs = (
 ): Effect.Effect<ReadonlyArray<Tab>, HerdrError> =>
   requestParsed(path, "tab.list", parseTabList, { workspace_id: workspaceId });
 
+const TabCreateResponse = Schema.Struct({
+  result: Schema.Struct({ root_pane: Schema.Struct({ pane_id: Schema.String }) }),
+});
+
 export const createAgent = (
   path: string,
   workspaceId: string,
   command: string,
 ): Effect.Effect<void, HerdrError> =>
   Effect.gen(function* () {
-    const created = yield* sendRequest(path, "tab.create", {
-      workspace_id: workspaceId,
-      focus: true,
-    });
-    if (
-      !isRecord(created) ||
-      !isRecord(created.result) ||
-      !isRecord(created.result.root_pane) ||
-      typeof created.result.root_pane.pane_id !== "string"
-    ) {
-      return yield* Effect.fail(new HerdrError({ message: "Invalid tab.create response" }));
-    }
+    const created = yield* requestParsed(
+      path,
+      "tab.create",
+      decode(TabCreateResponse, "tab.create"),
+      { workspace_id: workspaceId, focus: true },
+    );
     yield* sendRequest(path, "pane.send_input", {
       pane_id: created.result.root_pane.pane_id,
       text: command,

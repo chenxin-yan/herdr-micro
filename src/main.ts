@@ -8,8 +8,7 @@ import { Command, Flag } from "effect/unstable/cli";
 import { version } from "../package.json";
 import { configFileExists, initializeConfig, loadConfig, type Config } from "./config.ts";
 import {
-  cycleTab,
-  cycleWorkspace,
+  cycleNumbered,
   initialControlState,
   reconcileControls,
   reduceControlMessage,
@@ -30,30 +29,21 @@ import type { Agent } from "./projection.ts";
 import { buildRender, LatestRenderQueue } from "./render.ts";
 import { watchDeck, type DeckMessage, type DeckWriter } from "./serial.ts";
 
-const HERDR_VERSION_TIMEOUT = "5 seconds";
 const HERDR_SOCKET = `${homedir()}/.config/herdr/herdr.sock`;
 
-const herdrVersion = Effect.tryPromise({
-  try: async (signal) => {
-    const child = Bun.spawn(["herdr", "--version"], { stdout: "pipe", stderr: "pipe", signal });
-    const [stdout, stderr, exitCode] = await Promise.all([
-      new Response(child.stdout).text(),
-      new Response(child.stderr).text(),
-      child.exited,
-    ]);
-    if (exitCode !== 0) throw new Error(stderr.trim() || `exit ${exitCode}`);
-    return stdout.trim();
+const herdrVersion = Effect.try({
+  try: () => {
+    const result = Bun.spawnSync(["herdr", "--version"], { timeout: 5_000 });
+    if (!result.success) {
+      throw new Error(
+        result.stderr.toString().trim() ||
+          (result.exitedDueToTimeout ? "timed out after 5 seconds" : `exit ${result.exitCode}`),
+      );
+    }
+    return result.stdout.toString().trim();
   },
   catch: (cause) => new Error(`Cannot run herdr --version: ${String(cause)}`),
-}).pipe(
-  Effect.timeoutOrElse({
-    duration: HERDR_VERSION_TIMEOUT,
-    orElse: () =>
-      Effect.fail(
-        new Error(`Cannot run herdr --version: timed out after ${HERDR_VERSION_TIMEOUT}`),
-      ),
-  }),
-);
+});
 
 interface ActiveDeck {
   readonly deck: DeckWriter;
@@ -186,7 +176,7 @@ const hostProgram = (config: Config) =>
           case "selectWorkspace":
             return Effect.gen(function* () {
               const workspaces = yield* listWorkspaces(HERDR_SOCKET);
-              const target = cycleWorkspace(workspaces, state.controls.workspaceId, effect.delta);
+              const target = cycleNumbered(workspaces, state.controls.workspaceId, effect.delta);
               if (!target) return;
               state.workspaces = workspaces;
               state.tabs = [];
@@ -216,7 +206,7 @@ const hostProgram = (config: Config) =>
             return Effect.gen(function* () {
               if (!state.controls.workspaceId) return;
               const tabs = yield* listTabs(HERDR_SOCKET, state.controls.workspaceId);
-              const target = cycleTab(tabs, state.controls.tabId, effect.delta);
+              const target = cycleNumbered(tabs, state.controls.tabId, effect.delta);
               if (!target) return;
               state.tabs = tabs;
               state.controls = { ...state.controls, tabId: target.id };

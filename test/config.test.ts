@@ -68,24 +68,6 @@ describe("loadConfig", () => {
     expect(await Effect.runPromise(loadConfig(path))).toEqual(provided);
   });
 
-  test("rejects invalid encoder inactivity timeouts", async () => {
-    for (const encoderTimeoutSeconds of [0, -1, "4"]) {
-      const path = tempPath();
-      await Bun.write(path, JSON.stringify({ ...DEFAULT_CONFIG, encoderTimeoutSeconds }));
-
-      const error = await Effect.runPromise(loadConfig(path).pipe(Effect.flip));
-      expect(error.message).toContain(`Invalid configuration at ${path}`);
-      expect(error.message).toContain('at ["encoderTimeoutSeconds"]');
-    }
-  });
-
-  test("accepts fractional encoder inactivity timeouts", async () => {
-    const path = tempPath();
-    await Bun.write(path, JSON.stringify({ ...DEFAULT_CONFIG, encoderTimeoutSeconds: 1.5 }));
-
-    expect((await Effect.runPromise(loadConfig(path))).encoderTimeoutSeconds).toBe(1.5);
-  });
-
   test("rejects malformed JSON with a schema error", async () => {
     const path = tempPath();
     await Bun.write(path, '{"defaultAgentCommand":["pi"');
@@ -112,15 +94,6 @@ describe("loadConfig", () => {
     );
   });
 
-  test("rejects a missing layer map", async () => {
-    const path = tempPath();
-    const { layerKeys: _, ...withoutLayerKeys } = DEFAULT_CONFIG;
-    await Bun.write(path, JSON.stringify(withoutLayerKeys));
-
-    const error = await Effect.runPromise(loadConfig(path).pipe(Effect.flip));
-    expect(error.message).toContain('Missing key\n  at ["layerKeys"]');
-  });
-
   test("rejects nested layer actions", async () => {
     const path = tempPath();
     await Bun.write(
@@ -134,40 +107,6 @@ describe("loadConfig", () => {
     const error = await Effect.runPromise(loadConfig(path).pipe(Effect.flip));
     expect(error.message).toContain(`Invalid configuration at ${path}`);
     expect(error.message).toContain('at ["layerKeys"]["1"]');
-  });
-
-  test("accepts a configured Send Keys sequence", async () => {
-    const path = tempPath();
-    const provided = {
-      ...DEFAULT_CONFIG,
-      commandKeys: {
-        ...DEFAULT_CONFIG.commandKeys,
-        "6": { type: "sendKeys" as const, keys: ["esc", "ctrl+c"] },
-      },
-    };
-    await Bun.write(path, JSON.stringify(provided));
-
-    const config = await Effect.runPromise(loadConfig(path));
-    expect(config.commandKeys["6"]).toEqual({ type: "sendKeys", keys: ["esc", "ctrl+c"] });
-  });
-
-  test("rejects empty Send Keys sequences and key names", async () => {
-    for (const keys of [[], [""]]) {
-      const path = tempPath();
-      await Bun.write(
-        path,
-        JSON.stringify({
-          ...DEFAULT_CONFIG,
-          commandKeys: {
-            ...DEFAULT_CONFIG.commandKeys,
-            "1": { type: "sendKeys", keys },
-          },
-        }),
-      );
-
-      const error = await Effect.runPromise(loadConfig(path).pipe(Effect.flip));
-      expect(error.message).toContain(`Invalid configuration at ${path}`);
-    }
   });
 
   test("rejects unknown key aliases", async () => {

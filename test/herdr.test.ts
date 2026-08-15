@@ -63,9 +63,9 @@ test("rejects malformed snapshots", () => {
   expect(() => parseSnapshot({ result: {} })).toThrow("Invalid session.snapshot response");
   expect(() =>
     parseSnapshot({ result: { snapshot: { agents: [{ workspace_id: "w" }] } } }),
-  ).toThrow("Invalid agent in session.snapshot response");
+  ).toThrow("Invalid session.snapshot response");
   expect(() => parseSnapshot({ result: { snapshot: { agents: [], focused_pane_id: 1 } } })).toThrow(
-    "Invalid focused_pane_id in session.snapshot response",
+    "Invalid session.snapshot response",
   );
 });
 
