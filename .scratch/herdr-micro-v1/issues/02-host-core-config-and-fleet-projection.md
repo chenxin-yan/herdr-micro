@@ -11,3 +11,7 @@
 - [ ] Fleet is projected in Herdr order into Agent Pages of six with states `idle/working/blocked/done/unknown`; agents shift left when one exits; off-page priority (`blocked > done > working > unknown > idle`) computed for the Page Key
 - [ ] Console demo renders the live projection (slots, states, page N/M, `+N` overflow) as agents start, work, block, and exit
 - [ ] Tests cover config defaults/rejection and projection edge cases (empty fleet, exactly six, seven agents, agent exit mid-page)
+
+## Comments
+
+- 2026-08-14: User replaced provided-file field merging with two-tier semantics: a missing file uses built-in defaults; a provided file must be complete and explicit. Added `config` path/status inspection and no-clobber `config init` so users can bootstrap the complete defaults instead of hand-writing them.

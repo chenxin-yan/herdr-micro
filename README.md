@@ -37,5 +37,15 @@ Redeploying code-only changes needs no `--libs` and no reset:
 
 ```bash
 bun install
-bun dev                        # fleet console against the local Herdr session
+bun dev                        # Host against the local Herdr session
 ```
+
+## Configuration
+
+With no file at `~/.config/herdr-micro/config.json`, the Host uses its built-in defaults. Generate a complete, editable file with:
+
+```bash
+bun src/main.ts config init
+```
+
+A provided file must contain every field; configuration is not merged with the defaults. Inspect the active path and whether it exists with `bun src/main.ts config`. All commands accept `--config PATH`. `config init` refuses to overwrite an existing file.

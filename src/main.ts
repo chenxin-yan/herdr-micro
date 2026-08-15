@@ -6,7 +6,7 @@ import { Effect } from "effect";
 import { Command, Flag } from "effect/unstable/cli";
 
 import { version } from "../package.json";
-import { loadConfig, type Config } from "./config.ts";
+import { configFileExists, initializeConfig, loadConfig, type Config } from "./config.ts";
 import {
   initialControlState,
   reconcileControls,
@@ -233,28 +233,60 @@ const hostProgram = (config: Config) =>
     );
   });
 
-const command = Command.make(
-  "herdr-micro",
-  {
+const reportCliError = <A, E extends { readonly message: string }, R>(
+  effect: Effect.Effect<A, E, R>,
+): Effect.Effect<A | void, never, R> =>
+  effect.pipe(
+    Effect.catch((error) =>
+      Effect.sync(() => {
+        console.error(error.message);
+        process.exitCode = 1;
+      }),
+    ),
+  );
+
+const command = Command.make("herdr-micro").pipe(
+  Command.withSharedFlags({
     config: Flag.file("config").pipe(
       Flag.withDescription("Path to the configuration file"),
       Flag.withDefault(`${homedir()}/.config/herdr-micro/config.json`),
     ),
-  },
-  ({ config }) =>
-    Effect.gen(function* () {
-      const loaded = yield* loadConfig(config);
-      const herdr = yield* herdrVersion;
-      yield* Effect.sync(() => console.error(`herdr-micro: ${herdr}`));
-      yield* hostProgram(loaded);
-    }).pipe(
-      Effect.catch((error) =>
-        Effect.sync(() => {
-          console.error(error.message);
-          process.exitCode = 1;
-        }),
-      ),
+  }),
+  Command.withHandler(({ config }) =>
+    reportCliError(
+      Effect.gen(function* () {
+        const loaded = yield* loadConfig(config);
+        const herdr = yield* herdrVersion;
+        yield* Effect.sync(() => console.error(`herdr-micro: ${herdr}`));
+        yield* hostProgram(loaded);
+      }),
     ),
+  ),
 );
 
-command.pipe(Command.run({ version }), Effect.provide(BunServices.layer), BunRuntime.runMain);
+const configInitCommand = Command.make("init", {}, () =>
+  reportCliError(
+    Effect.gen(function* () {
+      const { config } = yield* command;
+      yield* initializeConfig(config);
+      console.log(config);
+    }),
+  ),
+);
+
+const configCommand = Command.make("config", {}, () =>
+  reportCliError(
+    Effect.gen(function* () {
+      const { config } = yield* command;
+      const exists = yield* configFileExists(config);
+      console.log(`${config}: ${exists ? "configured" : "none (built-in defaults)"}`);
+    }),
+  ),
+).pipe(Command.withSubcommands([configInitCommand]));
+
+command.pipe(
+  Command.withSubcommands([configCommand]),
+  Command.run({ version }),
+  Effect.provide(BunServices.layer),
+  BunRuntime.runMain,
+);

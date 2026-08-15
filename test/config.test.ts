@@ -1,11 +1,15 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { rmSync } from "node:fs";
+import { mkdirSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 
 import { BunFileSystem } from "@effect/platform-bun";
 import { Effect } from "effect";
 
-import { DEFAULT_CONFIG, loadConfig as loadConfigEffect } from "../src/config.ts";
+import {
+  DEFAULT_CONFIG,
+  initializeConfig as initializeConfigEffect,
+  loadConfig as loadConfigEffect,
+} from "../src/config.ts";
 
 const paths: string[] = [];
 const tempPath = () => {
@@ -15,9 +19,11 @@ const tempPath = () => {
 };
 const loadConfig = (path: string) =>
   loadConfigEffect(path).pipe(Effect.provide(BunFileSystem.layer));
+const initializeConfig = (path: string) =>
+  initializeConfigEffect(path).pipe(Effect.provide(BunFileSystem.layer));
 
 afterEach(() => {
-  for (const path of paths.splice(0)) rmSync(path, { force: true });
+  for (const path of paths.splice(0)) rmSync(path, { force: true, recursive: true });
 });
 
 describe("loadConfig", () => {
@@ -26,61 +32,39 @@ describe("loadConfig", () => {
     expect(config).toEqual(DEFAULT_CONFIG);
   });
 
-  test("fills missing command keys with none", async () => {
+  test("rejects an incomplete provided file", async () => {
     const path = tempPath();
-    await Bun.write(
-      path,
-      JSON.stringify({
-        defaultAgentCommand: ["pi"],
-        commandKeys: { "2": { type: "closeTab" } },
-        appearance: DEFAULT_CONFIG.appearance,
-      }),
-    );
+    await Bun.write(path, JSON.stringify({ defaultAgentCommand: ["pi"] }));
 
-    const config = await Effect.runPromise(loadConfig(path));
-    expect(config.commandKeys).toEqual({
-      "1": { type: "none" },
-      "2": { type: "closeTab" },
-      "3": { type: "none" },
-      "4": { type: "none" },
-      "5": { type: "none" },
-      "6": { type: "none" },
-    });
+    const error = await Effect.runPromise(loadConfig(path).pipe(Effect.flip));
+    expect(error.message).toContain(`Invalid configuration at ${path}`);
+    expect(error.message).toContain('Missing key\n  at ["commandKeys"]');
   });
 
-  test("fills all missing fields with defaults", async () => {
+  test("rejects unknown properties", async () => {
     const path = tempPath();
-    await Bun.write(path, JSON.stringify({}));
+    await Bun.write(path, JSON.stringify({ ...DEFAULT_CONFIG, bogus: 1 }));
 
-    const config = await Effect.runPromise(loadConfig(path));
-    expect(config).toEqual({
+    const error = await Effect.runPromise(loadConfig(path).pipe(Effect.flip));
+    expect(error.message).toContain(`Invalid configuration at ${path}`);
+    expect(error.message).toContain('at ["bogus"]');
+  });
+
+  test("decodes a complete file without merging defaults", async () => {
+    const path = tempPath();
+    const provided = {
       ...DEFAULT_CONFIG,
-      // Provided-file per-key default is none, not the built-in bindings.
-      commandKeys: {
-        "1": { type: "none" },
-        "2": { type: "none" },
-        "3": { type: "none" },
-        "4": { type: "none" },
-        "5": { type: "none" },
-        "6": { type: "none" },
+      defaultAgentCommand: ["claude"],
+      commandKeys: { ...DEFAULT_CONFIG.commandKeys, "1": { type: "none" as const } },
+      appearance: {
+        ...DEFAULT_CONFIG.appearance,
+        brightness: 0.75,
+        states: { ...DEFAULT_CONFIG.appearance.states, blocked: "#123456" },
       },
-    });
-  });
+    };
+    await Bun.write(path, JSON.stringify(provided));
 
-  test("fills missing nested appearance fields around provided ones", async () => {
-    const path = tempPath();
-    await Bun.write(
-      path,
-      JSON.stringify({
-        appearance: { states: { blocked: "#123456" } },
-      }),
-    );
-
-    const config = await Effect.runPromise(loadConfig(path));
-    expect(config.appearance).toEqual({
-      brightness: DEFAULT_CONFIG.appearance.brightness,
-      states: { ...DEFAULT_CONFIG.appearance.states, blocked: "#123456" },
-    });
+    expect(await Effect.runPromise(loadConfig(path))).toEqual(provided);
   });
 
   test("rejects malformed JSON with a schema error", async () => {
@@ -95,7 +79,13 @@ describe("loadConfig", () => {
 
   test("rejects invalid config with an exact error", async () => {
     const path = tempPath();
-    await Bun.write(path, JSON.stringify({ appearance: { brightness: 1.5 } }));
+    await Bun.write(
+      path,
+      JSON.stringify({
+        ...DEFAULT_CONFIG,
+        appearance: { ...DEFAULT_CONFIG.appearance, brightness: 1.5 },
+      }),
+    );
 
     const error = await Effect.runPromise(loadConfig(path).pipe(Effect.flip));
     expect(error.message).toBe(
@@ -105,7 +95,11 @@ describe("loadConfig", () => {
 
   test("accepts Send Escape as a configured action", async () => {
     const path = tempPath();
-    await Bun.write(path, JSON.stringify({ commandKeys: { "6": { type: "sendEsc" } } }));
+    const provided = {
+      ...DEFAULT_CONFIG,
+      commandKeys: { ...DEFAULT_CONFIG.commandKeys, "6": { type: "sendEsc" as const } },
+    };
+    await Bun.write(path, JSON.stringify(provided));
 
     const config = await Effect.runPromise(loadConfig(path));
     expect(config.commandKeys["6"]).toEqual({ type: "sendEsc" });
@@ -117,11 +111,32 @@ describe("loadConfig", () => {
       path,
       JSON.stringify({
         ...DEFAULT_CONFIG,
-        commandKeys: { "1": { type: "keyAlias", key: "NOT_A_KEY" } },
+        commandKeys: { ...DEFAULT_CONFIG.commandKeys, "1": { type: "keyAlias", key: "NOT_A_KEY" } },
       }),
     );
 
     const error = await Effect.runPromise(loadConfig(path).pipe(Effect.flip));
     expect(error.message).toContain("NOT_A_KEY");
+  });
+});
+
+describe("initializeConfig", () => {
+  test("creates parent directories and writes defaults that round-trip", async () => {
+    const root = tempPath();
+    const path = `${root}/nested/config.json`;
+    await Effect.runPromise(initializeConfig(path));
+
+    expect(JSON.parse(readFileSync(path, "utf8"))).toEqual(DEFAULT_CONFIG);
+    expect(await Effect.runPromise(loadConfig(path))).toEqual(DEFAULT_CONFIG);
+  });
+
+  test("refuses to overwrite an existing file", async () => {
+    const path = tempPath();
+    mkdirSync(path.slice(0, path.lastIndexOf("/")), { recursive: true });
+    await Bun.write(path, "keep me");
+
+    const error = await Effect.runPromise(initializeConfig(path).pipe(Effect.flip));
+    expect(error.message).toBe(`Configuration already exists at ${path}; refusing to overwrite it`);
+    expect(readFileSync(path, "utf8")).toBe("keep me");
   });
 });

@@ -1,3 +1,5 @@
+import { dirname } from "node:path";
+
 import { Data, Effect, FileSystem, Result, Schema, SchemaIssue } from "effect";
 
 // adafruit_hid Keycode names accepted by the device side.
@@ -40,37 +42,26 @@ const CommandAction = Schema.Union([
   Schema.Struct({ type: Schema.Literal("keyAlias"), key: Schema.Literals(HID_KEYS) }),
 ]);
 const HexColor = Schema.String.check(Schema.isPattern(/^#[0-9a-fA-F]{6}$/));
-// Every field is optional in a provided file; leaf defaults live here in
-// the schema, containers default to {} so the leaf defaults cascade.
-const color = (fallback: string) =>
-  HexColor.pipe(Schema.withDecodingDefaultKey(Effect.succeed(fallback)));
-const DefaultedAction = CommandAction.pipe(
-  Schema.withDecodingDefaultKey(Effect.succeed({ type: "none" as const })),
-);
 const ConfigSchema = Schema.Struct({
-  defaultAgentCommand: Schema.Array(Schema.String).pipe(
-    Schema.withDecodingDefaultKey(Effect.succeed(["pi"])),
-  ),
+  defaultAgentCommand: Schema.Array(Schema.String),
   commandKeys: Schema.Struct({
-    "1": DefaultedAction,
-    "2": DefaultedAction,
-    "3": DefaultedAction,
-    "4": DefaultedAction,
-    "5": DefaultedAction,
-    "6": DefaultedAction,
-  }).pipe(Schema.withDecodingDefaultKey(Effect.succeed({}))),
+    "1": CommandAction,
+    "2": CommandAction,
+    "3": CommandAction,
+    "4": CommandAction,
+    "5": CommandAction,
+    "6": CommandAction,
+  }),
   appearance: Schema.Struct({
-    brightness: Schema.Finite.check(Schema.isBetween({ minimum: 0, maximum: 1 })).pipe(
-      Schema.withDecodingDefaultKey(Effect.succeed(0.2)),
-    ),
+    brightness: Schema.Finite.check(Schema.isBetween({ minimum: 0, maximum: 1 })),
     states: Schema.Struct({
-      blocked: color("#ff0000"),
-      done: color("#00ff00"),
-      working: color("#0000ff"),
-      idle: color("#ffffff"),
-      unknown: color("#8000ff"),
-    }).pipe(Schema.withDecodingDefaultKey(Effect.succeed({}))),
-  }).pipe(Schema.withDecodingDefaultKey(Effect.succeed({}))),
+      blocked: HexColor,
+      done: HexColor,
+      working: HexColor,
+      idle: HexColor,
+      unknown: HexColor,
+    }),
+  }),
 });
 
 export type Config = typeof ConfigSchema.Type;
@@ -78,16 +69,24 @@ export type CommandAction = typeof CommandAction.Type;
 export type CommandKeys = Config["commandKeys"];
 
 export const DEFAULT_CONFIG: Config = {
-  ...Schema.decodeUnknownSync(ConfigSchema)({}),
-  // Missing-file default: the rich built-in bindings. Keys omitted from a
-  // provided commandKeys still default to none per spec.
+  defaultAgentCommand: ["pi"],
   commandKeys: {
     "1": { type: "newAgent" },
     "2": { type: "closeTab" },
-    "3": { type: "sendCtrlC" },
+    "3": { type: "sendEsc" },
     "4": { type: "keyAlias", key: "RIGHT_GUI" },
     "5": { type: "enter" },
-    "6": { type: "sendEsc" },
+    "6": { type: "sendCtrlC" },
+  },
+  appearance: {
+    brightness: 0.2,
+    states: {
+      blocked: "#ff0000",
+      done: "#00ff00",
+      working: "#0000ff",
+      idle: "#ffffff",
+      unknown: "#8000ff",
+    },
   },
 };
 
@@ -127,4 +126,49 @@ export const loadConfig = Effect.fn("loadConfig")(function* (
   if (text === undefined) return DEFAULT_CONFIG;
 
   return yield* decodeConfig(text, path);
+});
+
+export const configFileExists = Effect.fn("configFileExists")(function* (
+  path: string,
+): Effect.fn.Return<boolean, ConfigError, FileSystem.FileSystem> {
+  const fs = yield* FileSystem.FileSystem;
+  return yield* fs
+    .exists(path)
+    .pipe(
+      Effect.mapError(
+        (cause) =>
+          new ConfigError({ message: `Cannot inspect configuration at ${path}: ${String(cause)}` }),
+      ),
+    );
+});
+
+export const initializeConfig = Effect.fn("initializeConfig")(function* (
+  path: string,
+): Effect.fn.Return<void, ConfigError, FileSystem.FileSystem> {
+  const fs = yield* FileSystem.FileSystem;
+  yield* fs
+    .makeDirectory(dirname(path), { recursive: true })
+    .pipe(
+      Effect.mapError(
+        (cause) =>
+          new ConfigError({ message: `Cannot create configuration directory: ${String(cause)}` }),
+      ),
+    );
+  yield* fs
+    .writeFileString(path, `${JSON.stringify(DEFAULT_CONFIG, undefined, 2)}\n`, { flag: "wx" })
+    .pipe(
+      Effect.catchReason(
+        "PlatformError",
+        "AlreadyExists",
+        () =>
+          new ConfigError({
+            message: `Configuration already exists at ${path}; refusing to overwrite it`,
+          }),
+      ),
+      Effect.catchTag("PlatformError", (cause) =>
+        Effect.fail(
+          new ConfigError({ message: `Cannot write configuration at ${path}: ${String(cause)}` }),
+        ),
+      ),
+    );
 });

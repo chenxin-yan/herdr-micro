@@ -26,7 +26,7 @@ Terminology: see `CONTEXT.md`. Decisions: see `docs/adr/`.
 
 ## Controls
 
-Physical keys 6–11 are **Command Keys**, configured as logical 1–6. The built-in layout is: 6 = `newAgent`, 7 = `closeTab`, 8 = `sendCtrlC`, 9 = right-Command `keyAlias`, 10 = `enter`, 11 = `sendEsc`.
+Physical keys 6–11 are **Command Keys**, configured as logical 1–6. The built-in layout is: 6 = `newAgent`, 7 = `closeTab`, 8 = `sendEsc`, 9 = right-Command `keyAlias`, 10 = `enter`, 11 = `sendCtrlC`.
 
 | Action      | Behavior                                                                                                                                                           |
 | ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
@@ -66,7 +66,9 @@ Rules: the protocol itself is unversioned; instead both hellos carry the app ver
 
 ## Configuration
 
-`~/.config/herdr-micro/config.json`, overridable via `--config PATH`. Missing file = defaults; in a provided file every field is optional with field-level defaults (keys omitted from `commandKeys` default to `none`, not the built-in bindings); invalid values = exact schema error, exit nonzero. One JSON schema shared by manual and Nix installs.
+`~/.config/herdr-micro/config.json`, overridable via `--config PATH`. Missing file = built-in defaults. A provided file is complete and explicit: every field and all six Command Keys are required; missing, invalid, or unknown values produce an exact schema error and a nonzero exit. There is no field-level merging. One JSON schema is shared by manual and Nix installs.
+
+`herdr-micro config` prints the resolved path and whether it is configured or using built-in defaults. `herdr-micro config init` creates parent directories and writes the complete built-in defaults to that path; it refuses to overwrite an existing file. Both commands respect `--config PATH`.
 
 ```json
 {
@@ -74,10 +76,10 @@ Rules: the protocol itself is unversioned; instead both hellos carry the app ver
   "commandKeys": {
     "1": { "type": "newAgent" },
     "2": { "type": "closeTab" },
-    "3": { "type": "sendCtrlC" },
+    "3": { "type": "sendEsc" },
     "4": { "type": "keyAlias", "key": "RIGHT_GUI" },
     "5": { "type": "enter" },
-    "6": { "type": "sendEsc" }
+    "6": { "type": "sendCtrlC" }
   },
   "appearance": {
     "brightness": 0.2,
@@ -92,11 +94,11 @@ Rules: the protocol itself is unversioned; instead both hellos carry the app ver
 }
 ```
 
-Missing/partial `commandKeys` → unbound keys are `none` (no implicit functional bindings). Duplicates allowed. Key Alias keys come from a closed enum mapped to Adafruit `Keycode` names.
+A Command Key is unbound only when its required entry explicitly uses `{"type":"none"}`. Duplicates are allowed. Key Alias keys come from a closed enum mapped to Adafruit `Keycode` names.
 
 ## Distribution
 
-- **Manual**: Bun source + frozen lockfile; installer script writes LaunchAgent plist (`gui` domain, absolute paths) + default config.
+- **Manual**: Bun source + frozen lockfile; installer script writes LaunchAgent plist (`gui` domain, absolute paths); `config init` bootstraps the complete default config.
 - **Nix**: flake with `packages.aarch64-darwin.{herdr-micro,default}` (Bun FOD/compile pattern per nixpkgs `hunk` precedent) and `homeManagerModules.default` exposing `services.herdr-micro.{enable,package,settings}`; module installs package + LaunchAgent, generates the JSON config. No nix-darwin requirement.
 - **Device Bundle**: separate artifact (`code.py` + `lib/` + manifest) installed by one explicit script (`herdr-micro-copy-device-bundle`): validates exactly one CIRCUITPY volume, copies libs first, `code.py` last, never touches the UF2 Runtime Image.
 
