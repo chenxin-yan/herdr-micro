@@ -4,13 +4,13 @@
 
 **Blocked by:** 02 — Host core: config + fleet projection; 03 — Device Bundle firmware.
 
-**Status:** ready-for-human
+**Status:** resolved
 
 - [x] Deck LEDs/OLED mirror real agents: state changes in Herdr appear on the Deck without restarting anything
 - [x] All six configured Command Key actions and the encoder behave per the spec, driven by real key presses
 - [x] Selected Agent follows Herdr's focused pane (including keyboard/mouse focus changes); a focused non-agent pane means none; actions without selection are no-ops
-- [ ] Reconnect matrix passes: Deck unplug/replug, Host restart, and Herdr restart each recover to a correct fresh render with no replayed inputs
-- [ ] App-version mismatch (stale Device Bundle) fails closed: Deck shows the redeploy screen, Host logs the mismatch
+- [x] Reconnect matrix passes: Deck unplug/replug, Host restart, and Herdr restart each recover to a correct fresh render with no replayed inputs
+- [x] App-version mismatch (stale Device Bundle) fails closed: Deck shows the redeploy screen, Host logs the mismatch
 
 ## Comments
 
@@ -26,3 +26,4 @@
 - 2026-08-15: User made the Tab-mode inactivity reset configurable. Required top-level `encoderTimeoutSeconds` accepts positive finite values (including fractions) and defaults to the desk-calibrated four seconds.
 - 2026-08-15: User added a hold-to-shift Command Layer, doubling the five usable action positions to ten. The new `layer` action is assignable in the base `commandKeys` map; while held, other Command Keys use the required complete `layerKeys` map. Nested layers are rejected. Actions are captured per physical key on key-down and retained through key-up, so releasing the Layer Key before a layered Key Alias cannot leave HID held. Defaults: base key 8 is Layer; while held, key 6 creates a new agent, key 7 closes the focused tab, and keys 9–11 are inert.
 - 2026-08-15: Desk verification (user-confirmed): layer hold works — hold-8 newAgent/closeTab, base keys unaffected, no stuck holds observed.
+- 2026-08-15: User confirmed full end-to-end verification, including the two remaining human-only checks: Herdr restart recovery and eyes-on redeploy screen + Host mismatch log. All acceptance boxes checked; resolved.
