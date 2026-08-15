@@ -28,12 +28,12 @@ describe("reduceControlMessage", () => {
   test("uses keys 0-4 as Agent Slots and key 5 as the fixed Page Key", () => {
     const fleet = Array.from({ length: 6 }, (_, index) => agent(index + 1));
     expect(press(initialControlState, 4, fleet)).toEqual({
-      state: { ...initialControlState, selectedPaneId: "p5" },
+      state: initialControlState,
       effects: [{ type: "focusAgent", paneId: "p5" }],
     });
-    const selected = press(initialControlState, 0, fleet).state;
+    const selected = { ...initialControlState, selectedPaneId: "p1" };
     expect(press(selected, 5, fleet)).toEqual({
-      state: { ...initialControlState, pageIndex: 1 },
+      state: { ...selected, pageIndex: 1 },
       effects: [],
     });
   });
@@ -109,10 +109,14 @@ describe("reduceControlMessage", () => {
   });
 });
 
-test("reconcileControls clamps a removed page and clears a missing Selected Agent", () => {
-  expect(
-    reconcileControls({ ...initialControlState, pageIndex: 1, selectedPaneId: "p6" }, [agent(1)]),
-  ).toEqual(initialControlState);
+test("reconcileControls derives selection from Herdr focus and clamps a removed page", () => {
+  const state = { ...initialControlState, pageIndex: 1, selectedPaneId: "p6" };
+  expect(reconcileControls(state, [agent(1)], "p1")).toEqual({
+    ...initialControlState,
+    selectedPaneId: "p1",
+  });
+  expect(reconcileControls(state, [agent(1)], "not-an-agent")).toEqual(initialControlState);
+  expect(reconcileControls(state, [agent(1)], undefined)).toEqual(initialControlState);
 });
 
 test("cycleWorkspace and cycleTab follow Herdr numbers with wraparound", () => {

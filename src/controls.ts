@@ -32,15 +32,17 @@ export const initialControlState: ControlState = {
   tabId: undefined,
 };
 
-export function reconcileControls(state: ControlState, fleet: ReadonlyArray<Agent>): ControlState {
-  const pageIndex = projectFleet(fleet, state.pageIndex).pageIndex;
-  const selectedPaneId = fleet.some(({ paneId }) => paneId === state.selectedPaneId)
-    ? state.selectedPaneId
-    : undefined;
+export function reconcileControls(
+  state: ControlState,
+  fleet: ReadonlyArray<Agent>,
+  focusedPaneId: string | undefined,
+): ControlState {
   return {
     ...state,
-    pageIndex,
-    selectedPaneId: pageIndex === state.pageIndex ? selectedPaneId : undefined,
+    pageIndex: projectFleet(fleet, state.pageIndex).pageIndex,
+    selectedPaneId: fleet.some(({ paneId }) => paneId === focusedPaneId)
+      ? focusedPaneId
+      : undefined,
   };
 }
 
@@ -97,7 +99,7 @@ export function reduceControlMessage(
     const selected = page.slots[message.k];
     if (!selected) return { state, effects: [] };
     return {
-      state: { ...state, selectedPaneId: selected.paneId },
+      state,
       effects: [{ type: "focusAgent", paneId: selected.paneId }],
     };
   }
@@ -107,7 +109,6 @@ export function reduceControlMessage(
       state: {
         ...state,
         pageIndex: (page.pageIndex + 1) % page.pageCount,
-        selectedPaneId: undefined,
       },
       effects: [],
     };

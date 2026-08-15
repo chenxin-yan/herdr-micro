@@ -20,8 +20,8 @@ Terminology: see `CONTEXT.md`. Decisions: see `docs/adr/`.
 
 - Fleet = agents reported by Herdr, in Herdr's order. Herdr is the sole source of truth; no state duplicated on Deck or Host beyond the current projection.
 - Five **Agent Slots** (physical keys 0–4), paged. **Agent Pages** of five; agents shift left when one exits.
-- Physical key 5 is the fixed **Page Key**. It cycles pages (wraps), clears selection, and its LED shows highest-priority state among _off-page_ agents.
-- **Selected Agent** = last Agent Slot pressed. Cleared on page change. Agent commands (Enter, Send Ctrl-C, and Send Escape) target it; ignored when none selected.
+- Physical key 5 is the fixed **Page Key**. It cycles pages (wraps), preserves selection, and its LED shows highest-priority state among _off-page_ agents.
+- **Selected Agent** = the agent in Herdr's focused pane, or none when the focused pane has no agent. Agent commands (Enter, Send Ctrl-C, and Send Escape) target it; ignored when none selected. Herdr focus is the single source of truth, including focus changes made outside the Deck.
 - State priority: `blocked > done > working > unknown > idle` (Herdr's five semantic states; presentation only).
 
 ## Controls
@@ -39,7 +39,7 @@ Physical keys 6–11 are **Command Keys**, configured as logical 1–6. The buil
 | `none`      | Inert                                                                                                                                                              |
 
 Encoder defaults to Workspace mode: rotation cycles and eagerly focuses Workspaces with the hardware delta direction inverted. Press enters Tab mode; rotation then cycles and eagerly focuses tabs within the current Workspace, with the same inverted direction. Press again or four seconds without rotation returns to Workspace mode. The OLED identifies Tab mode and the selected tab.
-Agent Slot press: `agent focus` (changes Herdr shared focus; does not raise the macOS window — accepted for v1).
+Agent Slot press requests `agent focus`; the resulting Herdr focus update selects the agent and refreshes the Deck (it does not raise the macOS window — accepted for v1).
 
 Dropped from v1: dictation-as-host-emitted-chord (rejected: macOS Accessibility churn), overflow beyond paging, transcript on OLED.
 

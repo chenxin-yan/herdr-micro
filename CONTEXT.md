@@ -37,8 +37,8 @@ An ordered group of up to five agents projected onto the Agent Slots. Agent Page
 _Avoid_: Bank, layer
 
 **Selected Agent**:
-The agent represented by the most recently pressed Agent Slot. Agent commands target this agent rather than whichever terminal happens to have operating-system focus.
-_Avoid_: Focused terminal, active pane
+The agent in Herdr's focused pane. Agent commands target it; focusing a non-agent pane means no agent is selected. Agent Slot presses request Herdr focus rather than maintaining separate Deck selection state.
+_Avoid_: Operating-system focus, locally selected pane
 
 **Command Key**:
 One of six Deck keys assigned to an action rather than an agent. Configuration numbers Command Keys 1–6 independently of the MacroPad's physical key numbers 6–11.

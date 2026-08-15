@@ -15,9 +15,11 @@ const STRUCTURAL_SUBSCRIPTIONS = [
   "workspace.reordered",
   "tab.created",
   "tab.closed",
+  "tab.focused",
   "tab.moved",
   "pane.created",
   "pane.closed",
+  "pane.focused",
   "pane.updated",
   "pane.moved",
   "pane.exited",
@@ -32,7 +34,12 @@ export class HerdrError extends Data.TaggedError("HerdrError")<{
 export const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null;
 
-export function parseSnapshot(input: unknown): ReadonlyArray<Agent> {
+export interface FleetSnapshot {
+  readonly fleet: ReadonlyArray<Agent>;
+  readonly focusedPaneId: string | undefined;
+}
+
+export function parseSnapshot(input: unknown): FleetSnapshot {
   if (
     !isRecord(input) ||
     !isRecord(input.result) ||
@@ -41,8 +48,12 @@ export function parseSnapshot(input: unknown): ReadonlyArray<Agent> {
   ) {
     throw new HerdrError({ message: "Invalid session.snapshot response" });
   }
+  const focusedPaneId = input.result.snapshot.focused_pane_id;
+  if (focusedPaneId !== undefined && focusedPaneId !== null && typeof focusedPaneId !== "string") {
+    throw new HerdrError({ message: "Invalid focused_pane_id in session.snapshot response" });
+  }
 
-  return input.result.snapshot.agents.map((value) => {
+  const fleet = input.result.snapshot.agents.map((value) => {
     if (
       !isRecord(value) ||
       typeof value.pane_id !== "string" ||
@@ -67,6 +78,7 @@ export function parseSnapshot(input: unknown): ReadonlyArray<Agent> {
       state: AGENT_STATES.find((state) => state === status) ?? "unknown",
     };
   });
+  return { fleet, focusedPaneId: focusedPaneId ?? undefined };
 }
 
 export function connect(path: string): Effect.Effect<Socket, HerdrError> {
@@ -342,12 +354,12 @@ export const createAgent = (
     });
   });
 
-const requestSnapshot = (path: string): Effect.Effect<ReadonlyArray<Agent>, HerdrError> =>
+const requestSnapshot = (path: string): Effect.Effect<FleetSnapshot, HerdrError> =>
   requestParsed(path, "session.snapshot", parseSnapshot);
 
 function refreshOnce(
   path: string,
-  onFleet: (fleet: ReadonlyArray<Agent>) => void,
+  onSnapshot: (snapshot: FleetSnapshot) => void,
   onRefresh: () => Effect.Effect<void, HerdrError>,
 ): Effect.Effect<void, HerdrError> {
   return Effect.gen(function* () {
@@ -359,7 +371,7 @@ function refreshOnce(
       Effect.gen(function* () {
         const subscriptions = [
           ...STRUCTURAL_SUBSCRIPTIONS,
-          ...initial.map(({ paneId }) => ({
+          ...initial.fleet.map(({ paneId }) => ({
             type: "pane.agent_status_changed",
             pane_id: paneId,
           })),
@@ -370,13 +382,16 @@ function refreshOnce(
           params: { subscriptions },
         });
         const current = yield* requestSnapshot(path);
-        yield* Effect.sync(() => onFleet(current));
+        yield* Effect.sync(() => onSnapshot(current));
         yield* onRefresh();
         // Panes created between the two snapshots have no agent_status
         // subscription yet; resubscribe immediately instead of waiting on a
         // socket that may never report them.
-        const known = new Set(initial.map(({ paneId }) => paneId));
-        if (current.length !== known.size || current.some(({ paneId }) => !known.has(paneId))) {
+        const known = new Set(initial.fleet.map(({ paneId }) => paneId));
+        if (
+          current.fleet.length !== known.size ||
+          current.fleet.some(({ paneId }) => !known.has(paneId))
+        ) {
           return;
         }
         yield* readUntil(
@@ -390,15 +405,15 @@ function refreshOnce(
 
 export const watchFleet = (
   path: string,
-  onFleet: (fleet: ReadonlyArray<Agent>) => void,
+  onSnapshot: (snapshot: FleetSnapshot) => void,
   onRefresh: () => Effect.Effect<void, HerdrError> = () => Effect.void,
 ): Effect.Effect<never, HerdrError> => {
   let previous = "";
-  const emitChange = (fleet: ReadonlyArray<Agent>) => {
-    const current = JSON.stringify(fleet);
+  const emitChange = (snapshot: FleetSnapshot) => {
+    const current = JSON.stringify(snapshot);
     if (current === previous) return;
     previous = current;
-    onFleet(fleet);
+    onSnapshot(snapshot);
   };
   // Retry inside forever so each successful cycle (= a subscription event
   // arrived) restarts the backoff at 250 ms instead of accumulating toward

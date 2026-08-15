@@ -263,6 +263,8 @@ const hostProgram = (config: Config) =>
         if (message.t === "hello") return handleHello(active, message.fw);
         if (!active.live) return Effect.void;
 
+        // Desk debugging: deck events are low-rate, so tracing stays on.
+        console.error(`deck ${JSON.stringify(message)}`);
         const previousMode = state.controls.encoderMode;
         const reduced = reduceControlMessage(
           state.controls,
@@ -271,6 +273,7 @@ const hostProgram = (config: Config) =>
           config.commandKeys,
         );
         state.controls = reduced.state;
+        for (const effect of reduced.effects) console.error(`  -> ${JSON.stringify(effect)}`);
         if (
           state.controls.encoderMode === "tabs" &&
           (message.t === "encoder" || (message.t === "key" && message.k === 12))
@@ -299,9 +302,13 @@ const hostProgram = (config: Config) =>
       [
         watchFleet(
           HERDR_SOCKET,
-          (fleet) => {
-            state.fleet = fleet;
-            state.controls = reconcileControls(state.controls, fleet);
+          (snapshot) => {
+            state.fleet = snapshot.fleet;
+            state.controls = reconcileControls(
+              state.controls,
+              snapshot.fleet,
+              snapshot.focusedPaneId,
+            );
             enqueueRender();
           },
           () => refreshWorkspaces,

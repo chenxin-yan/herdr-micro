@@ -18,9 +18,10 @@ import {
 } from "../src/herdr.ts";
 
 test("maps a session snapshot into the Fleet in Herdr order", () => {
-  const fleet = parseSnapshot({
+  const snapshot = parseSnapshot({
     result: {
       snapshot: {
+        focused_pane_id: "p1",
         agents: [
           {
             pane_id: "p2",
@@ -35,24 +36,27 @@ test("maps a session snapshot into the Fleet in Herdr order", () => {
     },
   });
 
-  expect(fleet.map(({ paneId, name, state }) => ({ paneId, name, state }))).toEqual([
+  expect(snapshot.fleet.map(({ paneId, name, state }) => ({ paneId, name, state }))).toEqual([
     { paneId: "p2", name: "Claude", state: "blocked" },
     { paneId: "p1", name: "pi", state: "working" },
   ]);
+  expect(snapshot.focusedPaneId).toBe("p1");
 });
 
 test("maps an unrecognized agent_status to unknown and falls back to pane_id for the name", () => {
-  const fleet = parseSnapshot({
+  const snapshot = parseSnapshot({
     result: {
       snapshot: {
+        focused_pane_id: null,
         agents: [{ pane_id: "p1", workspace_id: "w", tab_id: "t", agent_status: "compacting" }],
       },
     },
   });
 
-  expect(fleet).toEqual([
-    { paneId: "p1", workspaceId: "w", tabId: "t", name: "p1", state: "unknown" },
-  ]);
+  expect(snapshot).toEqual({
+    fleet: [{ paneId: "p1", workspaceId: "w", tabId: "t", name: "p1", state: "unknown" }],
+    focusedPaneId: undefined,
+  });
 });
 
 test("rejects malformed snapshots", () => {
@@ -60,6 +64,9 @@ test("rejects malformed snapshots", () => {
   expect(() =>
     parseSnapshot({ result: { snapshot: { agents: [{ workspace_id: "w" }] } } }),
   ).toThrow("Invalid agent in session.snapshot response");
+  expect(() => parseSnapshot({ result: { snapshot: { agents: [], focused_pane_id: 1 } } })).toThrow(
+    "Invalid focused_pane_id in session.snapshot response",
+  );
 });
 
 // Drives readUntil with synthetic socket events: run the effect, let the
@@ -255,6 +262,7 @@ test("watchFleet reconnects and reads a fresh snapshot", async () => {
         id,
         result: {
           snapshot: {
+            focused_pane_id: "p1",
             agents: [
               {
                 pane_id: "p1",
@@ -304,8 +312,8 @@ test("watchFleet reconnects and reads a fresh snapshot", async () => {
   const fiber = Effect.runFork(
     watchFleet(
       path,
-      (fleet) => {
-        fleets.push(fleet);
+      (snapshot) => {
+        fleets.push(snapshot.fleet);
         if (fleets.length === 1) {
           status = "done";
           subscriptions.forEach((socket) => socket.destroy());
@@ -325,6 +333,8 @@ test("watchFleet reconnects and reads a fresh snapshot", async () => {
     await secondFleet;
     expect(fleets.map(([agent]) => agent?.state)).toEqual(["working", "done"]);
     expect(subscriptionTypes).toContain("workspace.focused");
+    expect(subscriptionTypes).toContain("tab.focused");
+    expect(subscriptionTypes).toContain("pane.focused");
     expect(refreshes).toBeGreaterThanOrEqual(2);
   } finally {
     clearTimeout(timer);
