@@ -103,6 +103,14 @@ describe("loadConfig", () => {
     );
   });
 
+  test("accepts Send Escape as a configured action", async () => {
+    const path = tempPath();
+    await Bun.write(path, JSON.stringify({ commandKeys: { "6": { type: "sendEsc" } } }));
+
+    const config = await Effect.runPromise(loadConfig(path));
+    expect(config.commandKeys["6"]).toEqual({ type: "sendEsc" });
+  });
+
   test("rejects unknown key aliases", async () => {
     const path = tempPath();
     await Bun.write(

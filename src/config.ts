@@ -36,6 +36,7 @@ const CommandAction = Schema.Union([
   Schema.Struct({ type: Schema.Literal("closeTab") }),
   Schema.Struct({ type: Schema.Literal("enter") }),
   Schema.Struct({ type: Schema.Literal("sendCtrlC") }),
+  Schema.Struct({ type: Schema.Literal("sendEsc") }),
   Schema.Struct({ type: Schema.Literal("keyAlias"), key: Schema.Literals(HID_KEYS) }),
 ]);
 const HexColor = Schema.String.check(Schema.isPattern(/^#[0-9a-fA-F]{6}$/));
@@ -83,10 +84,10 @@ export const DEFAULT_CONFIG: Config = {
   commandKeys: {
     "1": { type: "newAgent" },
     "2": { type: "closeTab" },
-    "3": { type: "none" },
+    "3": { type: "sendCtrlC" },
     "4": { type: "keyAlias", key: "RIGHT_GUI" },
     "5": { type: "enter" },
-    "6": { type: "sendCtrlC" },
+    "6": { type: "sendEsc" },
   },
 };
 

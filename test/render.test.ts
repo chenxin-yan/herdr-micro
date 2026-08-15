@@ -18,25 +18,21 @@ describe("buildRender", () => {
     fleet[0] = agent(1, "working");
     fleet[5] = agent(6, "blocked");
 
-    const render = buildRender(fleet, 0, "p1", "project", undefined, DEFAULT_CONFIG);
+    const render = buildRender(fleet, 0, "p1", "project", "thinking", DEFAULT_CONFIG);
     expect(render.led).toHaveLength(12);
     expect(render.led[0]).toEqual([0, 0, 51]);
     expect(render.led[5]).toEqual([51, 0, 0]);
-    expect(render.text).toEqual(["agent-1", "working", "workspace/tab-1", "Page 1/2"]);
+    expect(render.text).toEqual(["agent-1", "working", "Enc: thinking", "Page 1/2"]);
   });
 
   test("renders target, focused Workspace, page, and fleet count without selection", () => {
-    const render = buildRender([agent(1)], 0, undefined, "project", undefined, DEFAULT_CONFIG);
+    const render = buildRender([agent(1)], 0, undefined, "project", "thinking", DEFAULT_CONFIG);
     expect(render.text).toEqual(["Target: local", "Workspace: project", "Page 1/1", "Fleet: 1"]);
   });
 
-  test("shows Tab mode for selected and unselected OLED views", () => {
-    const tabMode = { label: "tests", index: 1, count: 3 };
-    expect(buildRender([agent(1)], 0, undefined, "project", tabMode, DEFAULT_CONFIG).text[1]).toBe(
-      "Tabs 2/3: tests",
-    );
-    expect(buildRender([agent(1)], 0, "p1", "project", tabMode, DEFAULT_CONFIG).text[2]).toBe(
-      "Tabs 2/3: tests",
+  test("shows Model encoder layer for a Selected Agent", () => {
+    expect(buildRender([agent(1)], 0, "p1", "project", "model", DEFAULT_CONFIG).text[2]).toBe(
+      "Enc: model",
     );
   });
 });

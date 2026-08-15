@@ -8,8 +8,6 @@ import { Command, Flag } from "effect/unstable/cli";
 import { version } from "../package.json";
 import { loadConfig, type Config } from "./config.ts";
 import {
-  cycleTab,
-  cycleWorkspace,
   initialControlState,
   reconcileControls,
   reduceControlMessage,
@@ -17,22 +15,14 @@ import {
   type ControlEffect,
   type ControlState,
 } from "./controls.ts";
-import {
-  createAgent,
-  listTabs,
-  listWorkspaces,
-  sendRequest,
-  watchFleet,
-  type Tab,
-  type Workspace,
-} from "./herdr.ts";
+import { createAgent, listWorkspaces, sendRequest, watchFleet, type Workspace } from "./herdr.ts";
 import type { Agent } from "./projection.ts";
 import { buildRender, LatestRenderQueue } from "./render.ts";
 import { watchDeck, type DeckMessage, type DeckWriter } from "./serial.ts";
 
 const HERDR_VERSION_TIMEOUT = "5 seconds";
 // ponytail: fixed desk-calibrated timeout; make configurable only if real use needs tuning.
-const TAB_MODE_TIMEOUT_MS = 4_000;
+const MODEL_MODE_TIMEOUT_MS = 4_000;
 const HERDR_SOCKET = `${homedir()}/.config/herdr/herdr.sock`;
 
 const herdrVersion = Effect.tryPromise({
@@ -67,7 +57,6 @@ interface AppState {
   fleet: ReadonlyArray<Agent>;
   controls: ControlState;
   workspaces: ReadonlyArray<Workspace>;
-  tabs: ReadonlyArray<Tab>;
   active: ActiveDeck | undefined;
 }
 
@@ -80,32 +69,19 @@ const hostProgram = (config: Config) =>
       fleet: [],
       controls: initialControlState,
       workspaces: [],
-      tabs: [],
       active: undefined,
     };
 
     const enqueueRender = () => {
       if (!state.active?.live) return;
-      const currentWorkspace = state.workspaces.find(({ id }) => id === state.controls.workspaceId);
-      const orderedTabs = [...state.tabs].sort((left, right) => left.number - right.number);
-      const currentTab =
-        orderedTabs.find(({ id }) => id === state.controls.tabId) ??
-        orderedTabs.find(({ focused }) => focused);
-      const tabMode =
-        state.controls.encoderMode === "tabs" && currentTab
-          ? {
-              label: currentTab.label,
-              index: orderedTabs.indexOf(currentTab),
-              count: orderedTabs.length,
-            }
-          : undefined;
+      const currentWorkspace = state.workspaces.find(({ focused }) => focused);
       state.active.renders.enqueue(
         buildRender(
           state.fleet,
           state.controls.pageIndex,
           state.controls.selectedPaneId,
           currentWorkspace?.label ?? currentWorkspace?.id,
-          tabMode,
+          state.controls.encoderMode,
           config,
         ),
       );
@@ -115,41 +91,29 @@ const hostProgram = (config: Config) =>
       Effect.tap((workspaces) =>
         Effect.sync(() => {
           state.workspaces = workspaces;
-          const currentWorkspace = workspaces.find((workspace) => workspace.focused);
-          if (currentWorkspace) {
-            state.controls = {
-              ...state.controls,
-              workspaceId: currentWorkspace.id,
-              tabId:
-                state.controls.encoderMode === "tabs"
-                  ? currentWorkspace.activeTabId
-                  : state.controls.tabId,
-            };
-          }
           enqueueRender();
         }),
       ),
     );
 
-    let tabModeTimer: ReturnType<typeof setTimeout> | undefined;
-    const clearTabModeTimer = () => {
-      if (tabModeTimer) clearTimeout(tabModeTimer);
-      tabModeTimer = undefined;
+    let modelModeTimer: ReturnType<typeof setTimeout> | undefined;
+    const clearModelModeTimer = () => {
+      if (modelModeTimer) clearTimeout(modelModeTimer);
+      modelModeTimer = undefined;
     };
-    const leaveTabMode = () => {
-      clearTabModeTimer();
+    const leaveModelMode = () => {
+      clearModelModeTimer();
       state.controls = reduceControlMessage(
         state.controls,
         { t: "encoderTimeout" },
         state.fleet,
         config.commandKeys,
       ).state;
-      state.tabs = [];
       enqueueRender();
     };
-    const armTabModeTimer = () => {
-      clearTabModeTimer();
-      tabModeTimer = setTimeout(leaveTabMode, TAB_MODE_TIMEOUT_MS);
+    const armModelModeTimer = () => {
+      clearModelModeTimer();
+      modelModeTimer = setTimeout(leaveModelMode, MODEL_MODE_TIMEOUT_MS);
     };
 
     const execute = (effect: ControlEffect, deck: DeckWriter): Effect.Effect<void, never> => {
@@ -183,46 +147,6 @@ const hostProgram = (config: Config) =>
               const tabId = workspaces.find((workspace) => workspace.focused)?.activeTabId;
               if (!tabId) return;
               yield* sendRequest(HERDR_SOCKET, "tab.close", { tab_id: tabId });
-            });
-          case "selectWorkspace":
-            return Effect.gen(function* () {
-              const workspaces = yield* listWorkspaces(HERDR_SOCKET);
-              const target = cycleWorkspace(workspaces, state.controls.workspaceId, effect.delta);
-              if (!target) return;
-              state.workspaces = workspaces;
-              state.tabs = [];
-              state.controls = { ...state.controls, workspaceId: target.id, tabId: undefined };
-              enqueueRender();
-              yield* sendRequest(HERDR_SOCKET, "workspace.focus", {
-                workspace_id: target.id,
-              });
-            });
-          case "enterTabMode":
-            return Effect.gen(function* () {
-              const workspaces = yield* listWorkspaces(HERDR_SOCKET);
-              const workspace = workspaces.find((value) => value.focused);
-              if (!workspace) return;
-              const tabs = yield* listTabs(HERDR_SOCKET, workspace.id);
-              const focused = tabs.find((tab) => tab.focused);
-              state.workspaces = workspaces;
-              state.tabs = tabs;
-              state.controls = {
-                ...state.controls,
-                workspaceId: workspace.id,
-                tabId: focused?.id ?? workspace.activeTabId,
-              };
-              enqueueRender();
-            });
-          case "selectTab":
-            return Effect.gen(function* () {
-              if (!state.controls.workspaceId) return;
-              const tabs = yield* listTabs(HERDR_SOCKET, state.controls.workspaceId);
-              const target = cycleTab(tabs, state.controls.tabId, effect.delta);
-              if (!target) return;
-              state.tabs = tabs;
-              state.controls = { ...state.controls, tabId: target.id };
-              enqueueRender();
-              yield* sendRequest(HERDR_SOCKET, "tab.focus", { tab_id: target.id });
             });
         }
       })();
@@ -270,13 +194,12 @@ const hostProgram = (config: Config) =>
         );
         state.controls = reduced.state;
         if (
-          state.controls.encoderMode === "tabs" &&
-          (message.t === "encoder" || (message.t === "key" && message.k === 12))
+          state.controls.encoderMode === "model" &&
+          (message.t === "encoder" || (message.t === "key" && message.k === 12 && message.down))
         ) {
-          armTabModeTimer();
-        } else if (previousMode === "tabs" && state.controls.encoderMode === "workspaces") {
-          clearTabModeTimer();
-          state.tabs = [];
+          armModelModeTimer();
+        } else if (previousMode === "model" && state.controls.encoderMode === "thinking") {
+          clearModelModeTimer();
         }
         enqueueRender();
         return Effect.forEach(reduced.effects, (effect) => execute(effect, deck), {
@@ -288,7 +211,7 @@ const hostProgram = (config: Config) =>
           if (state.active?.deck !== deck) return;
           state.active.renders.clear();
           state.active = undefined;
-          leaveTabMode();
+          leaveModelMode();
           console.error("Deck disconnected");
         }),
     };
