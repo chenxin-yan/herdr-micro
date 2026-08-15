@@ -4,11 +4,11 @@
 
 **Blocked by:** 02 — Host core: config + fleet projection; 03 — Device Bundle firmware.
 
-**Status:** ready-for-agent
+**Status:** ready-for-human
 
-- [ ] Deck LEDs/OLED mirror real agents: state changes in Herdr appear on the Deck without restarting anything
-- [ ] All six configured Command Key actions and the encoder behave per the spec, driven by real key presses
-- [ ] Selected Agent follows Herdr's focused pane (including keyboard/mouse focus changes); a focused non-agent pane means none; actions without selection are no-ops
+- [x] Deck LEDs/OLED mirror real agents: state changes in Herdr appear on the Deck without restarting anything
+- [x] All six configured Command Key actions and the encoder behave per the spec, driven by real key presses
+- [x] Selected Agent follows Herdr's focused pane (including keyboard/mouse focus changes); a focused non-agent pane means none; actions without selection are no-ops
 - [ ] Reconnect matrix passes: Deck unplug/replug, Host restart, and Herdr restart each recover to a correct fresh render with no replayed inputs
 - [ ] App-version mismatch (stale Device Bundle) fails closed: Deck shows the redeploy screen, Host logs the mismatch
 
@@ -22,3 +22,4 @@
 - 2026-08-15: User reversed the encoder decision and restored Workspace/Tab navigation: default inverted rotation eagerly focuses Workspaces; press enters a temporary Tab mode whose inverted rotation focuses adjacent tabs with wraparound; another press or four seconds without rotation returns to Workspace mode. Thinking/model key sending was removed outright. Current default command bindings remain key 8 Send Escape and key 11 Send Ctrl-C.
 - 2026-08-15: Desk diagnosis found selectedPaneId was local state changed only by Agent Slot presses, so keyboard/mouse focus changes in Herdr left commands targeting a stale pane. User approved deriving Selected Agent from Herdr's `session.snapshot.focused_pane_id` instead. Focus events now refresh that snapshot; page changes preserve selection, slot presses only request `agent.focus`, and a focused non-agent pane clears selection.
 - 2026-08-15: User replaced the hard-coded `enter`, `sendCtrlC`, and `sendEsc` actions with generic `sendKeys` and chose defaults: key 6 `ctrl+c`, key 7 `esc`, key 8 none, key 9 right-Command Key Alias, key 10 `enter`, key 11 `alt+enter`. Send Keys carries a non-empty array of non-empty strings; Herdr remains the single source of truth for key-spelling validation. Live verification used a private unfocused scratch tab, ran pi, confirmed `agent send-keys <pane> alt+enter` returned `ok`, then closed the tab.
+- 2026-08-15: Desk verification (user-confirmed, "everything works"): mirroring, all command keys (ctrl+c/esc/enter/alt+enter/dictation hold), encoder Workspace/Tab modes, and focus-derived selection incl. mouse/keyboard pane switches. Checked boxes 1-3. Deck unplug/replug and Host restart recovery were exercised repeatedly during the session (fresh render each reconnect, no replayed inputs observed), but two acceptance items remain explicitly unverified and are human-only: (a) Herdr restart recovery, (b) eyes-on confirmation of the redeploy screen + Host mismatch log with a stale bundle (implicitly traversed during the 0.0.1→0.0.2 redeploy, never visually confirmed). Status set to ready-for-human for those two checks; resolve after.

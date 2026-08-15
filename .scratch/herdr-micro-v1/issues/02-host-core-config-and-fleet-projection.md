@@ -4,7 +4,7 @@
 
 **Blocked by:** None — can start immediately.
 
-**Status:** ready-for-agent
+**Status:** resolved
 
 - [ ] `herdr-micro --config PATH` (default `~/.config/herdr-micro/config.json`) resolves the full v1 schema from the spec; missing file → defaults, invalid file → exact error + nonzero exit
 - [ ] Host bootstraps from `session.snapshot` and stays current via `events.subscribe` on the local default Session socket; Herdr restart is survived via reconnect + fresh snapshot
