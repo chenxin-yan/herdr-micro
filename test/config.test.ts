@@ -93,16 +93,38 @@ describe("loadConfig", () => {
     );
   });
 
-  test("accepts Send Escape as a configured action", async () => {
+  test("accepts a configured Send Keys sequence", async () => {
     const path = tempPath();
     const provided = {
       ...DEFAULT_CONFIG,
-      commandKeys: { ...DEFAULT_CONFIG.commandKeys, "6": { type: "sendEsc" as const } },
+      commandKeys: {
+        ...DEFAULT_CONFIG.commandKeys,
+        "6": { type: "sendKeys" as const, keys: ["esc", "ctrl+c"] },
+      },
     };
     await Bun.write(path, JSON.stringify(provided));
 
     const config = await Effect.runPromise(loadConfig(path));
-    expect(config.commandKeys["6"]).toEqual({ type: "sendEsc" });
+    expect(config.commandKeys["6"]).toEqual({ type: "sendKeys", keys: ["esc", "ctrl+c"] });
+  });
+
+  test("rejects empty Send Keys sequences and key names", async () => {
+    for (const keys of [[], [""]]) {
+      const path = tempPath();
+      await Bun.write(
+        path,
+        JSON.stringify({
+          ...DEFAULT_CONFIG,
+          commandKeys: {
+            ...DEFAULT_CONFIG.commandKeys,
+            "1": { type: "sendKeys", keys },
+          },
+        }),
+      );
+
+      const error = await Effect.runPromise(loadConfig(path).pipe(Effect.flip));
+      expect(error.message).toContain(`Invalid configuration at ${path}`);
+    }
   });
 
   test("rejects unknown key aliases", async () => {

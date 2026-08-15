@@ -21,22 +21,20 @@ Terminology: see `CONTEXT.md`. Decisions: see `docs/adr/`.
 - Fleet = agents reported by Herdr, in Herdr's order. Herdr is the sole source of truth; no state duplicated on Deck or Host beyond the current projection.
 - Five **Agent Slots** (physical keys 0–4), paged. **Agent Pages** of five; agents shift left when one exits.
 - Physical key 5 is the fixed **Page Key**. It cycles pages (wraps), preserves selection, and its LED shows highest-priority state among _off-page_ agents.
-- **Selected Agent** = the agent in Herdr's focused pane, or none when the focused pane has no agent. Agent commands (Enter, Send Ctrl-C, and Send Escape) target it; ignored when none selected. Herdr focus is the single source of truth, including focus changes made outside the Deck.
+- **Selected Agent** = the agent in Herdr's focused pane, or none when the focused pane has no agent. Send Keys commands target it and are ignored when none is selected. Herdr focus is the single source of truth, including focus changes made outside the Deck.
 - State priority: `blocked > done > working > unknown > idle` (Herdr's five semantic states; presentation only).
 
 ## Controls
 
-Physical keys 6–11 are **Command Keys**, configured as logical 1–6. The built-in layout is: 6 = `newAgent`, 7 = `closeTab`, 8 = `sendEsc`, 9 = right-Command `keyAlias`, 10 = `enter`, 11 = `sendCtrlC`.
+Physical keys 6–11 are **Command Keys**, configured as logical 1–6. The built-in layout is: 6 = Send Keys `ctrl+c`, 7 = Send Keys `esc`, 8 = `none`, 9 = right-Command `keyAlias`, 10 = Send Keys `enter`, 11 = Send Keys `alt+enter`.
 
-| Action      | Behavior                                                                                                                                                           |
-| ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `newAgent`  | Create and focus a tab in the focused Workspace, `pane run` the configured `defaultAgentCommand` (argv array) in its root pane; Herdr detection picks up the agent |
-| `closeTab`  | Close the currently focused tab                                                                                                                                    |
-| `keyAlias`  | Host commands Deck to hold one configured HID key (e.g. `RIGHT_GUI` for dictation) while the Command Key is held. Single key only — no chords/sequences            |
-| `enter`     | `agent send-keys <selected> enter`                                                                                                                                 |
-| `sendCtrlC` | `agent send-keys <selected> ctrl+c` — plain tap, no hold                                                                                                           |
-| `sendEsc`   | `agent send-keys <selected> esc`                                                                                                                                   |
-| `none`      | Inert                                                                                                                                                              |
+| Action     | Behavior                                                                                                                                                           |
+| ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `newAgent` | Create and focus a tab in the focused Workspace, `pane run` the configured `defaultAgentCommand` (argv array) in its root pane; Herdr detection picks up the agent |
+| `closeTab` | Close the currently focused tab                                                                                                                                    |
+| `keyAlias` | Host commands Deck to hold one configured HID key (e.g. `RIGHT_GUI` for dictation) while the Command Key is held. Single key only — no chords/sequences            |
+| `sendKeys` | Send the configured non-empty key sequence to the Selected Agent via `agent send-keys`; Herdr validates key spellings before writing any bytes                     |
+| `none`     | Inert                                                                                                                                                              |
 
 Encoder defaults to Workspace mode: rotation cycles and eagerly focuses Workspaces with the hardware delta direction inverted. Press enters Tab mode; rotation then cycles and eagerly focuses tabs within the current Workspace, with the same inverted direction. Press again or four seconds without rotation returns to Workspace mode. The OLED identifies Tab mode and the selected tab.
 Agent Slot press requests `agent focus`; the resulting Herdr focus update selects the agent and refreshes the Deck (it does not raise the macOS window — accepted for v1).
@@ -74,12 +72,12 @@ Rules: the protocol itself is unversioned; instead both hellos carry the app ver
 {
   "defaultAgentCommand": ["pi"],
   "commandKeys": {
-    "1": { "type": "newAgent" },
-    "2": { "type": "closeTab" },
-    "3": { "type": "sendEsc" },
+    "1": { "type": "sendKeys", "keys": ["ctrl+c"] },
+    "2": { "type": "sendKeys", "keys": ["esc"] },
+    "3": { "type": "none" },
     "4": { "type": "keyAlias", "key": "RIGHT_GUI" },
-    "5": { "type": "enter" },
-    "6": { "type": "sendCtrlC" }
+    "5": { "type": "sendKeys", "keys": ["enter"] },
+    "6": { "type": "sendKeys", "keys": ["alt+enter"] }
   },
   "appearance": {
     "brightness": 0.2,
@@ -94,7 +92,7 @@ Rules: the protocol itself is unversioned; instead both hellos carry the app ver
 }
 ```
 
-A Command Key is unbound only when its required entry explicitly uses `{"type":"none"}`. Duplicates are allowed. Key Alias keys come from a closed enum mapped to Adafruit `Keycode` names.
+A Command Key is unbound only when its required entry explicitly uses `{"type":"none"}`. Duplicates are allowed. Send Keys accepts a non-empty array of non-empty Herdr key spellings; validation stays with Herdr rather than being duplicated in this schema. Key Alias keys come from a separate closed enum mapped to Adafruit `Keycode` names.
 
 ## Distribution
 

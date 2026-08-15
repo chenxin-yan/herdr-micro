@@ -126,12 +126,8 @@ export function reduceControlMessage(
       return { state, effects: [{ type: "newAgent" }] };
     case "closeTab":
       return { state, effects: [{ type: "closeTab" }] };
-    case "enter":
-      return { state, effects: sendSelected(state, ["enter"]) };
-    case "sendCtrlC":
-      return { state, effects: sendSelected(state, ["ctrl+c"]) };
-    case "sendEsc":
-      return { state, effects: sendSelected(state, ["esc"]) };
+    case "sendKeys":
+      return { state, effects: sendSelected(state, action.keys) };
   }
 }
 

@@ -40,11 +40,13 @@ describe("reduceControlMessage", () => {
 
   test("maps command keys 6-11 to the default layout", () => {
     const selected = { ...initialControlState, selectedPaneId: "p1" };
-    expect(press(selected, 6, [agent(1)]).effects).toEqual([{ type: "newAgent" }]);
-    expect(press(selected, 7, [agent(1)]).effects).toEqual([{ type: "closeTab" }]);
-    expect(press(selected, 8, [agent(1)]).effects).toEqual([
+    expect(press(selected, 6, [agent(1)]).effects).toEqual([
+      { type: "sendKeys", paneId: "p1", keys: ["ctrl+c"] },
+    ]);
+    expect(press(selected, 7, [agent(1)]).effects).toEqual([
       { type: "sendKeys", paneId: "p1", keys: ["esc"] },
     ]);
+    expect(press(selected, 8, [agent(1)]).effects).toEqual([]);
     expect(press(selected, 9, [agent(1)]).effects).toEqual([
       { type: "hid", key: "RIGHT_GUI", down: true },
     ]);
@@ -60,19 +62,31 @@ describe("reduceControlMessage", () => {
       { type: "sendKeys", paneId: "p1", keys: ["enter"] },
     ]);
     expect(press(selected, 11, [agent(1)]).effects).toEqual([
-      { type: "sendKeys", paneId: "p1", keys: ["ctrl+c"] },
+      { type: "sendKeys", paneId: "p1", keys: ["alt+enter"] },
     ]);
   });
 
+  test("forwards a configured Send Keys sequence unchanged", () => {
+    const selected = { ...initialControlState, selectedPaneId: "p1" };
+    const commandKeys = {
+      ...DEFAULT_CONFIG.commandKeys,
+      "3": { type: "sendKeys" as const, keys: ["esc", "ctrl+c"] as const },
+    };
+    expect(
+      reduceControlMessage(selected, { t: "key", k: 8, down: true }, [agent(1)], commandKeys)
+        .effects,
+    ).toEqual([{ type: "sendKeys", paneId: "p1", keys: ["esc", "ctrl+c"] }]);
+  });
+
   test("logs selected-agent actions without a selection instead of acting", () => {
-    expect(press(initialControlState, 8, [agent(1)]).effects).toEqual([
-      { type: "log", message: "esc ignored: no agent selected" },
+    expect(press(initialControlState, 6, [agent(1)]).effects).toEqual([
+      { type: "log", message: "ctrl+c ignored: no agent selected" },
     ]);
     expect(press(initialControlState, 10, [agent(1)]).effects).toEqual([
       { type: "log", message: "enter ignored: no agent selected" },
     ]);
     expect(press(initialControlState, 11, [agent(1)]).effects).toEqual([
-      { type: "log", message: "ctrl+c ignored: no agent selected" },
+      { type: "log", message: "alt+enter ignored: no agent selected" },
     ]);
   });
 

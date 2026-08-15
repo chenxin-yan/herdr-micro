@@ -68,6 +68,6 @@ _Avoid_: Firmware, runtime
 The CircuitPython UF2 image installed on the Deck.
 _Avoid_: Firmware, device bundle
 
-**Send Ctrl-C**:
-Inject the `ctrl+c` key chord into an agent's terminal.
-_Avoid_: Interrupt, stop, kill
+**Send Keys**:
+Inject a configured non-empty sequence of Herdr key spellings into the Selected Agent's terminal.
+_Avoid_: Key Alias, keyboard macro

@@ -36,9 +36,10 @@ const CommandAction = Schema.Union([
   Schema.Struct({ type: Schema.Literal("none") }),
   Schema.Struct({ type: Schema.Literal("newAgent") }),
   Schema.Struct({ type: Schema.Literal("closeTab") }),
-  Schema.Struct({ type: Schema.Literal("enter") }),
-  Schema.Struct({ type: Schema.Literal("sendCtrlC") }),
-  Schema.Struct({ type: Schema.Literal("sendEsc") }),
+  Schema.Struct({
+    type: Schema.Literal("sendKeys"),
+    keys: Schema.NonEmptyArray(Schema.NonEmptyString),
+  }),
   Schema.Struct({ type: Schema.Literal("keyAlias"), key: Schema.Literals(HID_KEYS) }),
 ]);
 const HexColor = Schema.String.check(Schema.isPattern(/^#[0-9a-fA-F]{6}$/));
@@ -71,12 +72,12 @@ export type CommandKeys = Config["commandKeys"];
 export const DEFAULT_CONFIG: Config = {
   defaultAgentCommand: ["pi"],
   commandKeys: {
-    "1": { type: "newAgent" },
-    "2": { type: "closeTab" },
-    "3": { type: "sendEsc" },
+    "1": { type: "sendKeys", keys: ["ctrl+c"] },
+    "2": { type: "sendKeys", keys: ["esc"] },
+    "3": { type: "none" },
     "4": { type: "keyAlias", key: "RIGHT_GUI" },
-    "5": { type: "enter" },
-    "6": { type: "sendCtrlC" },
+    "5": { type: "sendKeys", keys: ["enter"] },
+    "6": { type: "sendKeys", keys: ["alt+enter"] },
   },
   appearance: {
     brightness: 0.2,
