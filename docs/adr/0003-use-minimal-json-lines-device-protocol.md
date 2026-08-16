@@ -10,6 +10,4 @@ A Render Snapshot contains:
 - optional `calm:true`: slowly breathe display contrast without framebuffer refreshes. The Host sets this only when every Fleet agent is idle.
 - optional `sleep:true`: turn LEDs off and show the bouncing OLED sleep mark until a later complete snapshot clears it.
 
-A transient `{"t":"sound","name":"attn"|"done"}` command plays one named chime and is discarded. The Host derives the Fleet transition and sends at most one sound per update; unlike a Render Snapshot, sound commands are not coalesced or retained.
-
 Effects are presentation instructions only: the Host still owns Fleet interpretation and the Deck retains no durable or semantic state. The Device types a connect splash, shifts the normal display slowly for burn-in protection, and bounces the sleep mark. These presentation details do not change protocol state.

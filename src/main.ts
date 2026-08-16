@@ -42,7 +42,6 @@ import {
   type PiStatus,
 } from "./render.ts";
 import { watchDeck, type DeckMessage, type DeckWriter } from "./serial.ts";
-import { detectFleetSound } from "./sound.ts";
 
 const HERDR_SOCKET = `${homedir()}/.config/herdr/herdr.sock`;
 
@@ -417,13 +416,8 @@ const hostProgram = (config: Config) =>
       [
         watchFleet(
           HERDR_SOCKET,
-          (snapshot, baseline) => {
+          (snapshot) => {
             const previousPaneId = state.controls.selectedPaneId;
-            const sound = detectFleetSound(
-              baseline ? undefined : state.fleet,
-              snapshot.fleet,
-              config.sounds,
-            );
             state.fleet = snapshot.fleet;
             syncFleetPresentationState(snapshot.fleet);
             state.controls = reconcileControls(
@@ -433,11 +427,6 @@ const hostProgram = (config: Config) =>
             );
             syncDetailPolling(previousPaneId);
             enqueueRender();
-            if (sound && state.active?.live) {
-              Effect.runFork(
-                state.active.deck.write({ t: "sound", name: sound }).pipe(Effect.catch(logFailure)),
-              );
-            }
           },
           () => refreshWorkspaces,
         ),

@@ -439,22 +439,15 @@ export const retryForever = <A, E extends { readonly message: string }, R>(
 
 export const watchFleet = (
   path: string,
-  onSnapshot: (snapshot: FleetSnapshot, baseline: boolean) => void,
+  onSnapshot: (snapshot: FleetSnapshot) => void,
   onRefresh: () => Effect.Effect<void, HerdrError> = () => Effect.void,
 ): Effect.Effect<never, HerdrError> => {
   let previous = "";
-  let baseline = true;
   const emitChange = (snapshot: FleetSnapshot) => {
     const current = JSON.stringify(snapshot);
-    if (current !== previous) {
-      previous = current;
-      onSnapshot(snapshot, baseline);
-    }
-    baseline = false;
+    if (current === previous) return;
+    previous = current;
+    onSnapshot(snapshot);
   };
-  return retryForever(
-    refreshOnce(path, emitChange, onRefresh).pipe(
-      Effect.tapError(() => Effect.sync(() => (baseline = true))),
-    ),
-  );
+  return retryForever(refreshOnce(path, emitChange, onRefresh));
 };

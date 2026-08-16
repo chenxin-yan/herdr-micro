@@ -317,14 +317,12 @@ test("watchFleet reconnects and reads a fresh snapshot", async () => {
   await once(server.listen(path), "listening");
 
   const fleets: Array<ReadonlyArray<{ readonly state: string }>> = [];
-  const baselines: boolean[] = [];
   const { promise: secondFleet, resolve: resolveSecond } = Promise.withResolvers<void>();
   const fiber = Effect.runFork(
     watchFleet(
       path,
-      (snapshot, baseline) => {
+      (snapshot) => {
         fleets.push(snapshot.fleet);
-        baselines.push(baseline);
         if (fleets.length === 1) {
           status = "done";
           subscriptions.forEach((socket) => socket.destroy());
@@ -343,7 +341,6 @@ test("watchFleet reconnects and reads a fresh snapshot", async () => {
   try {
     await secondFleet;
     expect(fleets.map(([agent]) => agent?.state)).toEqual(["working", "done"]);
-    expect(baselines).toEqual([true, true]);
     expect(subscriptionTypes).toContain("workspace.focused");
     expect(subscriptionTypes).toContain("tab.focused");
     expect(subscriptionTypes).toContain("pane.focused");

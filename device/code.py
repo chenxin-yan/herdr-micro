@@ -1,5 +1,5 @@
 # herdr-micro Device Bundle — Device Protocol (ADR-0003).
-# Pure peripheral (ADR-0001): raw hello/key/encoder up, render/hid/sound down.
+# Pure peripheral (ADR-0001): raw hello/key/encoder up, render/hid down.
 import json
 import math
 
@@ -64,7 +64,7 @@ serial.write_timeout = 0  # never block the input scan on a slow/absent host
 
 # Session state, reset on every DTR rising edge:
 #   "waiting"   connected (or not), no host hello yet
-#   "live"      host hello received; render/hid/sound accepted
+#   "live"      host hello received; render/hid accepted
 #   "mismatch"  host app version differs; fail closed until reconnect
 state = "waiting"
 shown_display = None
@@ -108,11 +108,6 @@ SLEEP_MIN_Y = 10
 SLEEP_MAX_Y = 55
 BURN_SHIFT_INTERVAL_MS = 300000
 BURN_POSITIONS = ((0, 0), (1, 0), (1, 1), (0, 1))
-ATTN_LOW_HZ = 659
-ATTN_HIGH_HZ = 880
-ATTN_NOTE_SECONDS = 0.06
-DONE_HZ = 523
-DONE_NOTE_SECONDS = 0.12
 
 
 def clear_header():
@@ -401,14 +396,6 @@ def hello():
     send({"t": "hello", "fw": VERSION})
 
 
-def play_sound(name):
-    if name == "attn":
-        macropad.play_tone(ATTN_LOW_HZ, ATTN_NOTE_SECONDS)
-        macropad.play_tone(ATTN_HIGH_HZ, ATTN_NOTE_SECONDS)
-    elif name == "done":
-        macropad.play_tone(DONE_HZ, DONE_NOTE_SECONDS)
-
-
 def handle(msg):
     global pending_render
     t = msg.get("t")
@@ -438,8 +425,6 @@ def handle(msg):
                 kbd.press(code)
             else:
                 kbd.release(code)
-    elif t == "sound":
-        play_sound(msg.get("name"))
 
 
 reader = LineReader()
