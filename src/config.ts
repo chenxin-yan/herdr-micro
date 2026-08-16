@@ -164,7 +164,7 @@ const ConfigFromJson = Schema.fromJsonString(PartialConfigSchema);
 function mergeWithDefaults(user: typeof PartialConfigSchema.Type): Config {
   const d = DEFAULT_CONFIG;
   return {
-    targets: user.targets ?? d.targets,
+    targets: { ...d.targets, ...user.targets },
     defaultTarget: user.defaultTarget ?? d.defaultTarget,
     defaultAgentCommand: user.defaultAgentCommand ?? d.defaultAgentCommand,
     encoderTimeoutSeconds: user.encoderTimeoutSeconds ?? d.encoderTimeoutSeconds,
