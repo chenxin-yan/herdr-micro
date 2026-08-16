@@ -105,8 +105,8 @@ export const DEFAULT_CONFIG: Config = {
     "1": { type: "newAgent", color: "#00ffff" },
     "2": { type: "closeTab", color: "#ff8800" },
     "3": { type: "none" },
-    "4": { type: "sendKeys", keys: ["left"], color: "#ffff00" },
-    "5": { type: "sendKeys", keys: ["right"], color: "#ffff00" },
+    "4": { type: "sendKeys", keys: ["down"], color: "#ffff00" },
+    "5": { type: "sendKeys", keys: ["up"], color: "#ffff00" },
     // Blocked by herdr 0.8.0: send_keys downgrades shift+tab to plain Tab
     // (herdrdev/herdr#1561, fixed on master, pending release).
     "6": { type: "sendKeys", keys: ["shift+tab"], color: "#ff8800" },

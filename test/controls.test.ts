@@ -176,15 +176,15 @@ describe("reduceControlMessage", () => {
     ]);
   });
 
-  test("maps the remaining layered keys to arrows and Thinking cycle", () => {
+  test("maps the remaining layered keys to vertical arrows and Thinking cycle", () => {
     const fleet = [agent(1)];
     const selected = { ...initialControlState, selectedPaneId: "p1" };
     const layerDown = key(selected, 8, true, fleet).state;
     expect(press(layerDown, 9, fleet).effects).toEqual([
-      { type: "sendKeys", paneId: "p1", keys: ["left"] },
+      { type: "sendKeys", paneId: "p1", keys: ["down"] },
     ]);
     expect(press(layerDown, 10, fleet).effects).toEqual([
-      { type: "sendKeys", paneId: "p1", keys: ["right"] },
+      { type: "sendKeys", paneId: "p1", keys: ["up"] },
     ]);
     expect(press(layerDown, 11, fleet).effects).toEqual([
       { type: "sendKeys", paneId: "p1", keys: ["shift+tab"] },
