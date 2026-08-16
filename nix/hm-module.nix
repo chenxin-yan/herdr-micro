@@ -46,6 +46,13 @@ in
 
         home.packages = [ cfg.package ];
 
+        # `herdr-micro stop` writes a persistent launchd disable flag for the shared
+        # label; bootstrap of a disabled service fails with I/O error 5, so clear it
+        # before Home Manager bootstraps the agent.
+        home.activation.herdrMicroEnable = lib.hm.dag.entryBefore [ "setupLaunchAgents" ] ''
+          /bin/launchctl enable "gui/$UID/dev.herdr.herdr-micro" || true
+        '';
+
         # The shared label makes Home Manager and the CLI target one plist; the CLI marker rule preserves HM ownership.
         launchd.agents.herdr-micro = {
           enable = true;
