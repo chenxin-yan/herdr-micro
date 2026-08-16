@@ -9,6 +9,7 @@ import {
   downLaunchctlCommands,
   failureDetail,
   isManagedPlist,
+  launchctlServiceIsRunning,
   launchctlTarget,
   renderLaunchAgentPlist,
   upLaunchctlCommands,
@@ -50,6 +51,11 @@ describe("launchd setup", () => {
     expect(failureDetail(null, new Error("spawn ENOENT"), null)).toBe("spawn ENOENT");
     expect(failureDetail("bad input\n", undefined, 1)).toBe("bad input");
     expect(failureDetail("", undefined, 9)).toBe("exit 9");
+  });
+
+  test("distinguishes a running launchd job from a registered crashed job", () => {
+    expect(launchctlServiceIsRunning("state = running\nlast exit code = 0\n")).toBe(true);
+    expect(launchctlServiceIsRunning("state = exited\nlast exit code = 1\n")).toBe(false);
   });
 
   test("builds the explicit PATH and launchctl command sequences", () => {

@@ -4,48 +4,59 @@ A physical control deck for a fleet of coding agents in [Herdr](https://herdr.de
 
 ## Setup
 
-### 1. Flash CircuitPython (fresh board only)
+Requirements: Apple Silicon macOS, [Bun](https://bun.sh), and [Herdr](https://herdr.dev/docs).
 
-Hold the rotary encoder (BOOTSEL), tap reset, keep holding until the
-`RPI-RP2` drive appears; drop the
-[10.x UF2](https://circuitpython.org/board/adafruit_macropad_rp2040/) onto it.
-`CIRCUITPY` mounts when done.
-
-### 2. Download the library bundle
-
-Bundle major version must match the firmware major version (10.x).
+Connect the Deck, then run:
 
 ```bash
-TAG=$(curl -s https://api.github.com/repos/adafruit/Adafruit_CircuitPython_Bundle/releases/latest | sed -n 's/.*"tag_name": "\(.*\)".*/\1/p')
-curl -sLo /tmp/bundle.zip "https://github.com/adafruit/Adafruit_CircuitPython_Bundle/releases/download/$TAG/adafruit-circuitpython-bundle-10.x-mpy-$TAG.zip"
-unzip -qo /tmp/bundle.zip -d /tmp
+bunx herdr-micro setup
 ```
 
-### 3. Deploy the Device Bundle
+Setup installs a standalone Host, initializes the default configuration when absent, and registers the `dev.herdr.herdr-micro` LaunchAgent. It then guides first-time CircuitPython installation and deploys the Device Bundle:
 
-Copies libs (before `code.py`), byte-verifies, then waits for you to press
-reset and for both serial ports to enumerate:
+- CircuitPython 10.2.1, with confirmation before flashing the UF2 Runtime Image
+- required libraries from the pinned Adafruit bundle 20260803
+- `boot.py`, `protocol.py`, and `code.py`, copied with the entrypoint last
+
+Entering the RP2040 bootloader requires physically holding the Deck's rotary encoder (BOOTSEL) while resetting it. Setup explains when that step is needed and refuses ambiguous or non-MacroPad volumes.
+
+Manage the Host with:
 
 ```bash
-./device/deploy.sh --libs /tmp/adafruit-circuitpython-bundle-10.x-mpy-$TAG/lib
+herdr-micro up
+herdr-micro down
+herdr-micro uninstall
 ```
 
-Redeploying code-only changes needs no `--libs` and no reset:
-`./device/deploy.sh`.
-
-### 4. Run the Host
-
-```bash
-bun install
-bun dev                        # Host against the local Herdr session
-```
+`uninstall` removes only the CLI-managed LaunchAgent. It leaves the CLI, configuration, logs, and Deck unchanged.
 
 ## Configuration
 
 With no file at `~/.config/herdr-micro/config.json`, the Host uses its built-in defaults. Generate a complete, editable file with:
 
 ```bash
-bun src/main.ts config init
+herdr-micro config init
 ```
 
-A provided file must contain every field; configuration is not merged with the defaults. Inspect the active path and whether it exists with `bun src/main.ts config`. All commands accept `--config PATH`. `config init` refuses to overwrite an existing file.
+A provided file must contain every field; configuration is not merged with the defaults. Inspect the active path and whether it exists with `herdr-micro config`. All commands accept `--config PATH`. `config init` refuses to overwrite an existing file.
+
+## Development
+
+```bash
+bun install
+bun dev
+bun test
+bun run check
+```
+
+For Device Bundle iteration, `device/deploy.sh` remains a development-only shortcut. After `herdr-micro setup` has installed the pinned libraries, code-only changes need no library path:
+
+```bash
+./device/deploy.sh
+```
+
+To refresh libraries explicitly, pass the extracted bundle's `lib/` directory:
+
+```bash
+./device/deploy.sh --libs ~/Library/Caches/herdr-micro/adafruit-circuitpython-bundle-10.x-mpy-20260803/lib
+```

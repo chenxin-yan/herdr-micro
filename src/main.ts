@@ -492,7 +492,7 @@ const setupCommand = Command.make("setup", {}, () =>
   reportCliError(
     Effect.gen(function* () {
       const { config } = yield* command;
-      yield* setupHost(config);
+      yield* setupHost(config, version);
     }),
   ),
 );

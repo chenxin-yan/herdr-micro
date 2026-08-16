@@ -18,6 +18,7 @@ import { fileURLToPath } from "node:url";
 import { Data, Effect } from "effect";
 
 import { configFileExists, initializeConfig } from "./config.ts";
+import { provisionDeck } from "./device-setup.ts";
 
 export const LAUNCHD_LABEL = "dev.herdr.herdr-micro";
 export const PLIST_MARKER = "HerdrMicroManaged";
@@ -132,6 +133,10 @@ export function launchctlDomain(uid: number): string {
   return `gui/${uid}`;
 }
 
+export function launchctlServiceIsRunning(output: string): boolean {
+  return /^\s*state = running\s*$/m.test(output);
+}
+
 export function upLaunchctlCommands(
   uid: number,
   plistPath: string,
@@ -157,7 +162,7 @@ function plistState(path: string): PlistState {
   return { kind: "regular", text: readFileSync(path, "utf8") };
 }
 
-function packageRoot(): string {
+export function packageRoot(): string {
   const relative = dirname(dirname(fileURLToPath(import.meta.url)));
   if (existsSync(join(relative, "package.json"))) return relative;
   const installedBuild = join(INSTALL_DIR, "build");
@@ -183,6 +188,7 @@ function installHostBinary(bun: string): void {
     cpSync(join(source, "package.json"), join(build, "package.json"));
     cpSync(join(source, "bun.lock"), join(build, "bun.lock"));
     cpSync(join(source, "src"), join(build, "src"), { recursive: true });
+    cpSync(join(source, "device"), join(build, "device"), { recursive: true });
   }
 
   runCommand(bun, ["install", "--production", "--frozen-lockfile"], build);
@@ -237,6 +243,7 @@ function writeManagedPlist(text: string): void {
 
 interface CommandResult {
   readonly status: number | null;
+  readonly output: string;
   readonly detail: string;
 }
 
@@ -246,8 +253,14 @@ function runLaunchctl(command: readonly string[]): CommandResult {
   const result = spawnSync(executable, command.slice(1), { encoding: "utf8" });
   return {
     status: result.status,
+    output: result.stdout ?? "",
     detail: result.status === 0 ? "" : failureDetail(result.stderr, result.error, result.status),
   };
+}
+
+function serviceIsRunning(uid: number): boolean {
+  const result = runLaunchctl(["/bin/launchctl", "print", launchctlTarget(uid)]);
+  return result.status === 0 && launchctlServiceIsRunning(result.output);
 }
 
 function requireLaunchctl(command: readonly string[], allow?: RegExp): void {
@@ -264,7 +277,7 @@ function registerService(uid: number): void {
   requireLaunchctl(bootstrap);
 }
 
-export const setupHost = (configPath: string) =>
+export const setupHost = (configPath: string, version: string) =>
   Effect.gen(function* () {
     const bun = Bun.which("bun");
     if (!bun) return yield* Effect.fail(setupError("Cannot find bun; install Bun before setup"));
@@ -305,12 +318,17 @@ export const setupHost = (configPath: string) =>
         );
         registerService(process.getuid!());
         console.log(`herdr-micro installed and started (${LAUNCHD_LABEL})`);
-        console.log("Deck provisioning will be added in the next distribution phase");
       },
       catch: (cause) =>
         cause instanceof SetupError
           ? cause
           : setupError(`Cannot configure service: ${String(cause)}`),
+    });
+
+    yield* provisionDeck({
+      packageRoot: packageRoot(),
+      version,
+      isHostRunning: () => serviceIsRunning(process.getuid!()),
     });
   });
 

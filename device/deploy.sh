@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# Development-only Device Bundle deploy; end users run `herdr-micro setup`.
 # Deploy the Device Bundle to CIRCUITPY and verify.
 # Usage: device/deploy.sh [--libs <bundle-lib-dir>]
 #   --libs  path to an extracted Adafruit 10.x bundle's lib/ (skips lib copy if omitted
