@@ -91,24 +91,12 @@ describe("loadConfig", () => {
     expect(error.message).toContain('defaultTarget "missing" is not present in targets');
   });
 
-  test("appends user targets to the built-in local target", async () => {
+  test("rejects replaced targets that drop the defaulted defaultTarget", async () => {
     const path = tempPath();
     await Bun.write(path, JSON.stringify({ targets: { minipc: { ssh: "cyan-minipc" } } }));
 
-    const config = await Effect.runPromise(loadConfig(path));
-    expect(config.targets).toEqual({
-      local: { socket: `${homedir()}/.config/herdr/herdr.sock` },
-      minipc: { ssh: "cyan-minipc" },
-    });
-    expect(config.defaultTarget).toBe("local");
-  });
-
-  test("rejects a defaultTarget missing from merged targets", async () => {
-    const path = tempPath();
-    await Bun.write(path, JSON.stringify({ defaultTarget: "missing" }));
-
     const error = await Effect.runPromise(loadConfig(path).pipe(Effect.flip));
-    expect(error.message).toContain('defaultTarget "missing" is not present in targets');
+    expect(error.message).toContain('defaultTarget "local" is not present in targets');
   });
 
   test("expands local socket homes and preserves the remote home for SSH resolution", async () => {
