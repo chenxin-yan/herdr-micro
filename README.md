@@ -69,6 +69,48 @@ herdr-micro config init
 
 A provided file must contain every field; configuration is not merged with the defaults. Inspect the active path and whether it exists with `herdr-micro config`. All commands accept `--config PATH`. `config init` refuses to overwrite an existing file.
 
+### Default Mapping
+
+```
+   ┌──────────────────────────────┐
+   │  OLED: workspace / agents /  │     ┌────────┐
+   │        selected agent info   │     │ ENCODER│
+   └──────────────────────────────┘     └────────┘
+   rotate ······ cycle Workspaces
+   press  ······ toggle Workspaces ⇄ Tabs mode (4s timeout back)
+   rotate in Tabs mode ····· cycle Tabs
+   LAYER + rotate ·········· pi model cycle (ctrl+p / shift+ctrl+p)
+   LAYER + press ··········· reserved
+
+   ┌───────────┬───────────┬───────────┐
+   │ Agent 1   │ Agent 2   │ Agent 3   │  AGENT SLOTS (page of 5)
+   │           │           │           │  press = focus that agent
+   ├───────────┼───────────┼───────────┤  LED = Agent State color
+   │ Agent 4   │ Agent 5   │ PAGE KEY  │← cycles Agent Pages
+   ├───────────┼───────────┼───────────┤
+   │ CMD1      │ CMD2      │ CMD3      │  COMMAND KEYS
+   │ ctrl+c 🟠 │ esc    🟠 │ LAYER  🔵 │← hold to shift CMD keys
+   ├───────────┼───────────┼───────────┤
+   │ CMD4      │ CMD5      │ CMD6      │
+   │ ⌘R HID 🟡 │ enter  🟠 │ alt+enter │
+   │ (hold =   │           │        🟠 │
+   │ dictation)│           │           │
+   └───────────┴───────────┴───────────┘
+
+   While LAYER (CMD3) is held:
+   ┌───────────┬───────────┬───────────┐
+   │ CMD1      │ CMD2      │ CMD3      │
+   │ new agent │ close tab │ (held     │
+   │ 🔵        │ 🟠        │  layer)   │
+   ├───────────┼───────────┼───────────┤
+   │ CMD4      │ CMD5      │ CMD6      │
+   │ ↓ down 🟡 │ ↑ up   🟡 │ shift+tab │
+   │           │           │        🟠 │
+   └───────────┴───────────┴───────────┘
+```
+
+Agent Slot LED colors follow Agent State: 🔴 blocked · 🟢 done · 🔵 working · ⚪ idle · 🟣 unknown.
+
 ## Development
 
 ```bash
