@@ -54,7 +54,7 @@ herdr-micro down
 herdr-micro uninstall
 ```
 
-`uninstall` removes only the CLI-managed LaunchAgent. It leaves the CLI, configuration, logs, and Deck unchanged.
+`uninstall` removes the CLI-managed LaunchAgent, the installed Host binary and build workspace, the CLI shim, and the download cache. It leaves configuration, logs, and the Deck unchanged.
 
 #### Configuration
 

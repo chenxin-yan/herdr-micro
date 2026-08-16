@@ -18,7 +18,7 @@ import { fileURLToPath } from "node:url";
 import { Data, Effect } from "effect";
 
 import { configFileExists, initializeConfig } from "./config.ts";
-import { provisionDeck } from "./device-setup.ts";
+import { CACHE_DIR, provisionDeck } from "./device-setup.ts";
 
 export const LAUNCHD_LABEL = "dev.herdr.herdr-micro";
 export const PLIST_MARKER = "HerdrMicroManaged";
@@ -384,15 +384,35 @@ export const uninstallService = Effect.gen(function* () {
   yield* stopService;
   if (decision === "stop-only") {
     console.log(`No service plist at ${PLIST_PATH}`);
-    return;
+  } else {
+    yield* Effect.try({
+      try: () => {
+        rmSync(PLIST_PATH);
+        console.log(`Removed service registration at ${PLIST_PATH}`);
+      },
+      catch: (cause) => setupError(`Cannot remove service registration: ${String(cause)}`),
+    });
   }
 
   yield* Effect.try({
     try: () => {
-      rmSync(PLIST_PATH);
-      console.log(`Removed service registration at ${PLIST_PATH}`);
-      console.log("CLI, configuration, logs, and Deck were left unchanged");
+      // Unlinking the running binary is safe on macOS: the inode lives on
+      // until this process exits.
+      for (const path of [INSTALL_DIR, CACHE_DIR]) {
+        if (existsSync(path)) {
+          rmSync(path, { recursive: true, force: true });
+          console.log(`Removed ${path}`);
+        }
+      }
+      const shim = lstatSync(SHIM_PATH, { throwIfNoEntry: false });
+      if (shim?.isSymbolicLink() && readlinkSync(SHIM_PATH) === INSTALLED_BINARY) {
+        rmSync(SHIM_PATH);
+        console.log(`Removed ${SHIM_PATH}`);
+      } else if (shim) {
+        console.warn(`warning: leaving ${SHIM_PATH}: not a herdr-micro shim`);
+      }
+      console.log("Configuration, logs, and Deck were left unchanged");
     },
-    catch: (cause) => setupError(`Cannot remove service registration: ${String(cause)}`),
+    catch: (cause) => setupError(`Cannot remove installed files: ${String(cause)}`),
   });
 });

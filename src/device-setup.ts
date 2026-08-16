@@ -44,7 +44,7 @@ export const DEVICE_MANIFEST = {
 
 export type DeviceLibrary = (typeof DEVICE_MANIFEST.libraries)[number];
 
-const CACHE_DIR = `${homedir()}/Library/Caches/herdr-micro`;
+export const CACHE_DIR = `${homedir()}/Library/Caches/herdr-micro`;
 const VOLUMES_DIR = "/Volumes";
 const VOLUME_TIMEOUT_MS = 60_000;
 const DOWNLOAD_TIMEOUT_MS = 120_000;
