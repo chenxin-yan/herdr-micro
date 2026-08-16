@@ -109,6 +109,11 @@ SLEEP_MAX_Y = 55
 BURN_SHIFT_INTERVAL_MS = 300000
 BURN_POSITIONS = ((0, 0), (1, 0), (1, 1), (0, 1))
 
+# Connect chirp calibration: two rising notes when the host handshake lands.
+CONNECT_LOW_HZ = 660
+CONNECT_HIGH_HZ = 880
+CONNECT_NOTE_SECONDS = 0.06
+
 
 def clear_header():
     header_bitmap.fill(0)
@@ -406,6 +411,8 @@ def handle(msg):
             change_state("live")
             if entering_live:
                 start_splash()
+                macropad.play_tone(CONNECT_LOW_HZ, CONNECT_NOTE_SECONDS)
+                macropad.play_tone(CONNECT_HIGH_HZ, CONNECT_NOTE_SECONDS)
             if host_ver is None:
                 hello()  # identify to a probe only; a versioned hello answered would ping-pong
         else:
