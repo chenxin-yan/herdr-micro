@@ -564,14 +564,7 @@ const configCommand = Command.make("config", {}, () =>
   ),
 ).pipe(Command.withSubcommands([configInitCommand]));
 
-const setupCommand = Command.make("setup", {}, () =>
-  reportCliError(
-    Effect.gen(function* () {
-      const { config } = yield* command;
-      yield* setupHost(config, version);
-    }),
-  ),
-);
+const setupCommand = Command.make("setup", {}, () => reportCliError(setupHost(version)));
 const upCommand = Command.make("up", {}, () => reportCliError(startService));
 const downCommand = Command.make("down", {}, () => reportCliError(stopService));
 const uninstallCommand = Command.make("uninstall", {}, () => reportCliError(uninstallService));

@@ -17,7 +17,6 @@ import { fileURLToPath } from "node:url";
 
 import { Data, Effect } from "effect";
 
-import { configFileExists, initializeConfig } from "./config.ts";
 import { CACHE_DIR, provisionDeck } from "./device-setup.ts";
 
 export const LAUNCHD_LABEL = "dev.herdr.herdr-micro";
@@ -257,11 +256,10 @@ function registerService(uid: number): void {
   requireLaunchctl(bootstrap);
 }
 
-export const setupHost = (configPath: string, version: string) =>
+export const setupHost = (version: string) =>
   Effect.gen(function* () {
     const nixManaged = isNixManagedExecutable(process.execPath);
     if (nixManaged) {
-      // Nix owns the Host binary; setup only initializes config and provisions the Deck.
       console.log("Host binary is Nix-managed; leaving it unchanged");
     } else {
       const bun = Bun.which("bun");
@@ -278,9 +276,6 @@ export const setupHost = (configPath: string, version: string) =>
             : setupError(`Cannot install herdr-micro: ${String(cause)}`),
       });
     }
-
-    const configured = yield* configFileExists(configPath);
-    if (!configured) yield* initializeConfig(configPath);
 
     const herdr = Bun.which("herdr");
     if (!herdr) {

@@ -45,7 +45,7 @@ There are two ways of setting up herdr-micro with your machine and deck:
 }
 ```
 
-After activation, run the Nix-installed `herdr-micro setup` to initialize configuration when absent and provision the Deck. It leaves the Nix-managed Host binary and Home Manager-managed LaunchAgent unchanged.
+After activation, run the Nix-installed `herdr-micro setup` to provision the Deck. It leaves the Nix-managed Host binary and Home Manager-managed LaunchAgent unchanged.
 
 ### 2. Manual Setup
 
@@ -57,7 +57,7 @@ Connect the Deck, then run:
 bunx herdr-micro setup
 ```
 
-Setup installs a standalone Host, initializes the default configuration when absent, and registers the `dev.herdr.herdr-micro` LaunchAgent. It then guides first-time CircuitPython installation and deploys the Device Bundle:
+Setup installs a standalone Host and registers the `dev.herdr.herdr-micro` LaunchAgent. It then guides first-time CircuitPython installation and deploys the Device Bundle:
 
 - CircuitPython 10.2.1, with confirmation before flashing the UF2 Runtime Image
 - required libraries from the pinned Adafruit bundle 20260803
@@ -83,7 +83,7 @@ With no file at `~/.config/herdr-micro/config.json`, the Host uses its built-in 
 herdr-micro config init
 ```
 
-A provided file must contain every field; configuration is not merged with the defaults. Inspect the active path and whether it exists with `herdr-micro config`. All commands accept `--config PATH`. `config init` refuses to overwrite an existing file.
+A provided file must contain every field; configuration is not merged with the defaults. Inspect the active path and whether it exists with `herdr-micro config`. Select another path for the Host and config commands with `--config PATH`. `config init` refuses to overwrite an existing file.
 
 ### Default Mapping
 
