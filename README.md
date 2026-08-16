@@ -10,6 +10,22 @@ A physical control deck for orchestrating a fleet of coding agents in [Herdr](ht
 
 > Note: herdr-micro is only tested on macOS, might not work on linux or windows
 
+## Herdr Targets
+
+The built-in configuration connects to the local `~/.config/herdr/herdr.sock`. A complete custom configuration may name local and remote Targets:
+
+```json
+{
+  "targets": {
+    "local": { "socket": "~/.config/herdr/herdr.sock" },
+    "minipc": { "ssh": "cyan-minipc" }
+  },
+  "defaultTarget": "local"
+}
+```
+
+Remote Targets use the named SSH host and default to the same Herdr socket path on that host. They require non-interactive SSH authentication (keys or an agent); tunnels run with BatchMode and never prompt. These fields are part of the complete configuration written by `herdr-micro config init`; provided configuration files are not merged with defaults.
+
 ## Getting Started
 
 There are two ways of setting up herdr-micro with your machine and deck:
@@ -80,7 +96,7 @@ A provided file must contain every field; configuration is not merged with the d
    press  ······ toggle Workspaces ⇄ Tabs mode (4s timeout back)
    rotate in Tabs mode ····· cycle Tabs
    LAYER + rotate ·········· pi model cycle (ctrl+p / shift+ctrl+p)
-   LAYER + press ··········· reserved
+   LAYER + press ··········· preview next Target (release LAYER to switch)
 
    ┌───────────┬───────────┬───────────┐
    │ Agent 1   │ Agent 2   │ Agent 3   │  AGENT SLOTS (page of 5)

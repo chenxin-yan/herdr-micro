@@ -1,3 +1,4 @@
+import { homedir } from "node:os";
 import { dirname } from "node:path";
 
 import { Data, Effect, FileSystem, Result, Schema, SchemaIssue } from "effect";
@@ -52,7 +53,16 @@ const CommandAction = Schema.Union([
   RegularCommandAction,
   Schema.Struct({ type: Schema.Literal("layer"), color: HexColor }),
 ]);
+const TargetConfig = Schema.Union([
+  Schema.Struct({ socket: Schema.NonEmptyString }),
+  Schema.Struct({
+    ssh: Schema.NonEmptyString,
+    socket: Schema.optionalKey(Schema.NonEmptyString),
+  }),
+]);
 const ConfigSchema = Schema.Struct({
+  targets: Schema.Record(Schema.NonEmptyString, TargetConfig),
+  defaultTarget: Schema.NonEmptyString,
   defaultAgentCommand: Schema.Array(Schema.String),
   encoderTimeoutSeconds: Schema.Finite.check(Schema.isGreaterThan(0)),
   screensaverMinutes: Schema.Finite.check(Schema.isGreaterThan(0)),
@@ -85,10 +95,13 @@ const ConfigSchema = Schema.Struct({
 });
 
 export type Config = typeof ConfigSchema.Type;
+export type TargetConfig = typeof TargetConfig.Type;
 export type CommandAction = typeof CommandAction.Type;
 export type CommandKeys = Config["commandKeys"];
 
 export const DEFAULT_CONFIG: Config = {
+  targets: { local: { socket: "~/.config/herdr/herdr.sock" } },
+  defaultTarget: "local",
   defaultAgentCommand: ["pi"],
   encoderTimeoutSeconds: 4,
   screensaverMinutes: 10,
@@ -142,7 +155,25 @@ function decodeConfig(text: string, path: string): Effect.Effect<Config, ConfigE
       }),
     );
   }
-  return Effect.succeed(decoded.success);
+  const config = decoded.success;
+  if (!(config.defaultTarget in config.targets)) {
+    return Effect.fail(
+      new ConfigError({
+        message: `Invalid configuration at ${path}: defaultTarget ${JSON.stringify(config.defaultTarget)} is not present in targets`,
+      }),
+    );
+  }
+  const expandHome = (value: string) =>
+    value === "~" ? homedir() : value.startsWith("~/") ? `${homedir()}${value.slice(1)}` : value;
+  return Effect.succeed({
+    ...config,
+    targets: Object.fromEntries(
+      Object.entries(config.targets).map(([name, target]) => [
+        name,
+        "ssh" in target ? target : { socket: expandHome(target.socket) },
+      ]),
+    ),
+  });
 }
 
 export const loadConfig = Effect.fn("loadConfig")(function* (
@@ -156,7 +187,7 @@ export const loadConfig = Effect.fn("loadConfig")(function* (
         new ConfigError({ message: `Cannot read configuration at ${path}: ${String(cause)}` }),
     ),
   );
-  if (text === undefined) return DEFAULT_CONFIG;
+  if (text === undefined) return yield* decodeConfig(JSON.stringify(DEFAULT_CONFIG), path);
 
   return yield* decodeConfig(text, path);
 });

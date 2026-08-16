@@ -53,9 +53,16 @@ export interface RenderOptions {
   readonly detail?: PiStatus;
   readonly now?: number;
   readonly sleep?: boolean;
+  readonly targetName?: string;
+  readonly targetPreviewName?: string;
+  readonly targetError?: boolean;
+  readonly connecting?: boolean;
+  readonly targetFlash?: string;
 }
 
 const COMMAND_SLOTS = ["1", "2", "3", "4", "5", "6"] as const;
+const TARGET_COLORS = ["#00ffff", "#ff8800", "#8000ff", "#00ff00", "#ffff00"] as const;
+export const targetColor = (index: number): string => TARGET_COLORS[index % TARGET_COLORS.length]!;
 
 export function parsePiStatus(text: string): PiStatus | undefined {
   for (const value of text.split("\n")) {
@@ -108,7 +115,7 @@ export function buildRender(
   const page = projectFleet(fleet, pageIndex);
   const selectedFleetIndex = fleet.findIndex(({ paneId }) => paneId === selectedPaneId);
   const selected = selectedFleetIndex < 0 ? undefined : fleet[selectedFleetIndex];
-  const led: ReadonlyArray<DeviceLed> = [
+  const normalLed: ReadonlyArray<DeviceLed> = [
     ...Array.from({ length: PAGE_SIZE }, (_, index) => {
       const agent = page.slots[index];
       return agent ? stateLed(config, agent.state) : OFF;
@@ -121,12 +128,22 @@ export function buildRender(
       return action.type === "none" ? OFF : color(action.color, config.appearance.brightness);
     }),
   ];
+  const led: ReadonlyArray<DeviceLed> = options.targetFlash
+    ? Array.from({ length: 12 }, () => color(options.targetFlash!, config.appearance.brightness))
+    : options.connecting
+      ? Array.from({ length: 12 }, () => OFF)
+      : normalLed;
+  const target = options.targetPreviewName ?? options.targetName;
+  // targetError describes the active connection; never attach it to a
+  // previewed candidate Target.
+  const errorMark = options.targetError && target === options.targetName ? " !" : "";
+  const targetLabel = target ? `${target}${errorMark}` : "";
   const context =
-    encoder.mode === "tabs"
-      ? encoder.tab
-        ? `tabs ${encoder.tab.index + 1}/${encoder.tab.count} ${encoder.tab.label}`
-        : "tabs"
-      : (workspaceLabel ?? "");
+    options.targetPreviewName !== undefined
+      ? `target: ${targetLabel}`
+      : encoder.mode === "tabs"
+        ? `${targetLabel} tabs ${encoder.tab ? `${encoder.tab.index + 1}/${encoder.tab.count} ${encoder.tab.label}` : ""}`
+        : [targetLabel, workspaceLabel].filter(Boolean).join(" ");
   const duration =
     selected && options.selectedStateSince !== undefined
       ? formatDuration((options.now ?? Date.now()) - options.selectedStateSince)

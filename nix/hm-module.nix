@@ -27,9 +27,10 @@ in
       type = lib.types.nullOr (lib.types.attrsOf lib.types.anything);
       default = null;
       description = ''
-        Complete herdr-micro configuration. The Host schema has no optional
-        fields and does not merge this value with built-in defaults. Leave null
-        to use the built-in defaults without creating a configuration file.
+        Complete herdr-micro configuration, including `targets` and
+        `defaultTarget`. The Host schema has no optional top-level fields and
+        does not merge this value with built-in defaults. Leave null to use the
+        built-in local Target without creating a configuration file.
       '';
     };
   };

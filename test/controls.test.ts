@@ -164,16 +164,55 @@ describe("reduceControlMessage", () => {
     ]);
   });
 
-  test("reserves Layer + encoder press as a no-op", () => {
-    const layerDown = key(initialControlState, 8, true, [agent(1)]).state;
-    expect(press(layerDown, 12, [agent(1)])).toEqual({ state: layerDown, effects: [] });
-  });
-
   test("logs Model rotation without a selected agent", () => {
     const layerDown = key(initialControlState, 8, true, [agent(1)]).state;
     expect(reduce(layerDown, { t: "encoder", delta: 1 }).effects).toEqual([
       { type: "log", message: "ctrl+p ignored: no agent selected" },
     ]);
+  });
+
+  test("previews Targets with Layer + encoder press and commits on Layer release", () => {
+    const config = {
+      ...DEFAULT_CONFIG,
+      targets: { local: { socket: "/local" }, remote: { ssh: "workbox" } },
+    };
+    const layerDown = key(initialControlState, 8, true, [agent(1)]).state;
+    const preview = reduceControlMessage(
+      layerDown,
+      { t: "key", k: 12, down: true },
+      [agent(1)],
+      config,
+      "local",
+    );
+    expect(preview.state.targetPreviewName).toBe("remote");
+    expect(preview.effects).toEqual([]);
+    // A second press wraps back to the active target.
+    const wrapped = reduceControlMessage(
+      preview.state,
+      { t: "key", k: 12, down: true },
+      [agent(1)],
+      config,
+      "local",
+    );
+    expect(wrapped.state.targetPreviewName).toBe("local");
+    const committed = reduceControlMessage(
+      preview.state,
+      { t: "key", k: 8, down: false },
+      [agent(1)],
+      config,
+      "local",
+    );
+    expect(committed.state.targetPreviewName).toBeUndefined();
+    expect(committed.effects).toEqual([{ type: "switchTarget", name: "remote" }]);
+  });
+
+  test("keeps Layer + encoder press a no-op with one Target and release without press cancels", () => {
+    const layerDown = key(initialControlState, 8, true, [agent(1)]).state;
+    expect(press(layerDown, 12, [agent(1)])).toEqual({ state: layerDown, effects: [] });
+    expect(key(layerDown, 8, false, [agent(1)])).toEqual({
+      state: initialControlState,
+      effects: [],
+    });
   });
 
   test("maps the remaining layered keys to vertical arrows and Thinking cycle", () => {

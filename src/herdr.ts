@@ -423,14 +423,16 @@ function refreshOnce(
 
 // Retry inside forever so each successful cycle restarts the backoff at
 // 250 ms instead of accumulating toward the 5 s cap over the daemon's lifetime.
+const logReconnect = (error: { readonly message: string }) =>
+  console.error(`${error.message}; reconnecting`);
+
 export const retryForever = <A, E extends { readonly message: string }, R>(
   effect: Effect.Effect<A, E, R>,
+  onError: (error: E) => void = logReconnect,
 ): Effect.Effect<never, E, R> =>
   Effect.forever(
     effect.pipe(
-      Effect.tapError((error) =>
-        Effect.sync(() => console.error(`${error.message}; reconnecting`)),
-      ),
+      Effect.tapError((error) => Effect.sync(() => onError(error))),
       Effect.retry(
         Schedule.min([Schedule.exponential("250 millis"), Schedule.spaced("5 seconds")]),
       ),
@@ -441,6 +443,7 @@ export const watchFleet = (
   path: string,
   onSnapshot: (snapshot: FleetSnapshot) => void,
   onRefresh: () => Effect.Effect<void, HerdrError> = () => Effect.void,
+  onError: (error: HerdrError) => void = logReconnect,
 ): Effect.Effect<never, HerdrError> => {
   let previous = "";
   const emitChange = (snapshot: FleetSnapshot) => {
@@ -449,5 +452,10 @@ export const watchFleet = (
     previous = current;
     onSnapshot(snapshot);
   };
-  return retryForever(refreshOnce(path, emitChange, onRefresh));
+  return retryForever(refreshOnce(path, emitChange, onRefresh), (error) => {
+    // Recovery can deliver a snapshot identical to the last pre-error one;
+    // reset the dedupe so consumers always observe the reconnect.
+    previous = "";
+    onError(error);
+  });
 };

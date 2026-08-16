@@ -23,16 +23,10 @@ const render = (
   selectedPaneId?: string,
   options: Parameters<typeof buildRender>[7] = {},
 ) =>
-  buildRender(
-    fleet,
-    0,
-    selectedPaneId,
-    "project",
-    { mode: "workspaces" },
-    false,
-    DEFAULT_CONFIG,
-    options,
-  );
+  buildRender(fleet, 0, selectedPaneId, "project", { mode: "workspaces" }, false, DEFAULT_CONFIG, {
+    targetName: "local",
+    ...options,
+  });
 
 describe("parsePiStatus", () => {
   test("extracts pi model, thinking, cost, and context from the visible status bar", () => {
@@ -122,14 +116,18 @@ describe("buildRender", () => {
       page: 1,
       pages: 2,
     });
-    expect(snapshot.text).toEqual(["project", "> agent-1  working 4m", "fable-5 high $34 15%"]);
+    expect(snapshot.text).toEqual([
+      "local project",
+      "> agent-1  working 4m",
+      "fable-5 high $34 15%",
+    ]);
     expect(snapshot.text.every((text) => text.length <= 21)).toBe(true);
   });
 
   test("renders minimally without a selected agent and marks an all-idle fleet calm", () => {
     const snapshot = render([agent(1)]);
     expect(snapshot.hdr).toEqual({ boxes: ["i"], sel: null, page: 1, pages: 1 });
-    expect(snapshot.text).toEqual(["project", "no agent selected", ""]);
+    expect(snapshot.text).toEqual(["local project", "no agent selected", ""]);
     expect(snapshot.sleep).toBeUndefined();
     expect(snapshot.calm).toBe(true);
     expect(render([agent(1, "working")]).calm).toBeUndefined();
@@ -145,11 +143,21 @@ describe("buildRender", () => {
     expect(snapshot.text[1]).toBe("> a-very-long-agent-n");
   });
 
-  test("renders Tab encoder mode on the context line", () => {
+  test("renders Target identity, preview, error, and Tab encoder mode on the context line", () => {
     const tabMode = { mode: "tabs" as const, tab: { label: "tests", index: 1, count: 3 } };
     expect(
-      buildRender([agent(1)], 0, "p1", "project", tabMode, false, DEFAULT_CONFIG).text[0],
-    ).toBe("tabs 2/3 tests");
+      buildRender([agent(1)], 0, "p1", "project", tabMode, false, DEFAULT_CONFIG, {
+        targetName: "remote",
+      }).text[0],
+    ).toBe("remote tabs 2/3 tests");
+    // The error marker belongs to the active Target, not a previewed candidate.
+    expect(
+      render([agent(1)], "p1", { targetPreviewName: "remote", targetError: true }).text[0],
+    ).toBe("target: remote");
+    expect(
+      render([agent(1)], "p1", { targetPreviewName: "local", targetError: true }).text[0],
+    ).toBe("target: local !");
+    expect(render([agent(1)], "p1", { targetError: true }).text[0]).toBe("local ! project");
   });
 
   test("caps the graphical header and omits an out-of-range selection", () => {
@@ -158,6 +166,16 @@ describe("buildRender", () => {
     expect(snapshot.hdr.boxes).toHaveLength(16);
     expect(snapshot.hdr.sel).toBeNull();
     expect(snapshot.hdr.pages).toBe(4);
+  });
+
+  test("flashes Target color then blanks LEDs while connecting", () => {
+    const flash = render([agent(1)], undefined, { targetFlash: "#00ffff" });
+    expect(flash.led.every((led) => JSON.stringify(led) === JSON.stringify([0, 51, 51]))).toBe(
+      true,
+    );
+    expect(render([agent(1)], undefined, { connecting: true }).led).toEqual(
+      Array.from({ length: 12 }, () => [0, 0, 0]),
+    );
   });
 
   test("passes the sleep presentation hint", () => {

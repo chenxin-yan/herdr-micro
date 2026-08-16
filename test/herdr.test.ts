@@ -224,6 +224,7 @@ test("watchFleet retries when Herdr stops answering snapshots", async () => {
   const path = `/tmp/herdr-micro-timeout-${process.pid}-${Date.now()}.sock`;
   const sockets = new Set<Socket>();
   let connections = 0;
+  let connectionErrors = 0;
   const { promise: firstConnection, resolve: resolveFirst } = Promise.withResolvers<void>();
   const { promise: secondConnection, resolve: resolveSecond } = Promise.withResolvers<void>();
   const server = createServer((socket) => {
@@ -236,7 +237,14 @@ test("watchFleet retries when Herdr stops answering snapshots", async () => {
   await once(server.listen(path), "listening");
 
   const program = Effect.gen(function* () {
-    yield* watchFleet(path, () => {}).pipe(Effect.forkChild);
+    yield* watchFleet(
+      path,
+      () => {},
+      undefined,
+      () => {
+        connectionErrors += 1;
+      },
+    ).pipe(Effect.forkChild);
     yield* Effect.promise(() => firstConnection);
     yield* TestClock.adjust("5 seconds");
     yield* Effect.yieldNow;
@@ -248,6 +256,7 @@ test("watchFleet retries when Herdr stops answering snapshots", async () => {
 
   try {
     await Effect.runPromise(program);
+    expect(connectionErrors).toBeGreaterThanOrEqual(1);
   } finally {
     sockets.forEach((socket) => socket.destroy());
     await new Promise<void>((resolve) => server.close(() => resolve()));
@@ -255,12 +264,13 @@ test("watchFleet retries when Herdr stops answering snapshots", async () => {
   }
 });
 
-test("watchFleet reconnects and reads a fresh snapshot", async () => {
+// The snapshot after recovery is identical to the pre-error one; it must still
+// emit so consumers learn the connection recovered (clears connecting state).
+test("watchFleet reconnects and re-emits an identical snapshot", async () => {
   const path = `/tmp/herdr-micro-${process.pid}-${Date.now()}.sock`;
   const sockets = new Set<Socket>();
   const subscriptions = new Set<Socket>();
   let snapshotRequests = 0;
-  let status = "working";
   let subscribed = false;
   let refreshes = 0;
   const subscriptionTypes = new Set<string>();
@@ -278,7 +288,7 @@ test("watchFleet reconnects and reads a fresh snapshot", async () => {
                 workspace_id: "w",
                 tab_id: "t",
                 display_agent: "pi",
-                agent_status: status,
+                agent_status: "working",
               },
             ],
           },
@@ -324,7 +334,6 @@ test("watchFleet reconnects and reads a fresh snapshot", async () => {
       (snapshot) => {
         fleets.push(snapshot.fleet);
         if (fleets.length === 1) {
-          status = "done";
           subscriptions.forEach((socket) => socket.destroy());
         } else {
           resolveSecond();
@@ -340,7 +349,7 @@ test("watchFleet reconnects and reads a fresh snapshot", async () => {
 
   try {
     await secondFleet;
-    expect(fleets.map(([agent]) => agent?.state)).toEqual(["working", "done"]);
+    expect(fleets.map(([agent]) => agent?.state)).toEqual(["working", "working"]);
     expect(subscriptionTypes).toContain("workspace.focused");
     expect(subscriptionTypes).toContain("tab.focused");
     expect(subscriptionTypes).toContain("pane.focused");

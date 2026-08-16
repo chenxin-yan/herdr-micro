@@ -9,6 +9,7 @@ export interface ControlState {
   readonly encoderMode: "workspaces" | "tabs";
   readonly tabId: string | undefined;
   readonly pressedCommandActions: Readonly<Partial<Record<keyof CommandKeys, CommandAction>>>;
+  readonly targetPreviewName: string | undefined;
 }
 
 export type ControlMessage =
@@ -24,6 +25,7 @@ export type ControlEffect =
   | { readonly type: "selectWorkspace"; readonly delta: number }
   | { readonly type: "enterTabMode" }
   | { readonly type: "selectTab"; readonly delta: number }
+  | { readonly type: "switchTarget"; readonly name: string }
   | { readonly type: "log"; readonly message: string };
 
 export const initialControlState: ControlState = {
@@ -33,6 +35,7 @@ export const initialControlState: ControlState = {
   encoderMode: "workspaces",
   tabId: undefined,
   pressedCommandActions: {},
+  targetPreviewName: undefined,
 };
 
 export function reconcileControls(
@@ -65,7 +68,8 @@ export function reduceControlMessage(
   state: ControlState,
   message: ControlMessage,
   fleet: ReadonlyArray<Agent>,
-  config: Pick<Config, "commandKeys" | "layerKeys">,
+  config: Pick<Config, "commandKeys" | "layerKeys" | "targets" | "defaultTarget">,
+  activeTargetName = config.defaultTarget,
 ): { readonly state: ControlState; readonly effects: ReadonlyArray<ControlEffect> } {
   if (message.t === "encoderTimeout") {
     return {
@@ -93,8 +97,14 @@ export function reduceControlMessage(
   }
   if (message.k === 12) {
     if (!message.down) return { state, effects: [] };
-    // Layer + encoder press is reserved for a future gesture.
-    if (isLayerHeld(state.pressedCommandActions)) return { state, effects: [] };
+    // Layer + encoder press advances the Target preview; Layer release commits.
+    if (isLayerHeld(state.pressedCommandActions)) {
+      const targets = Object.keys(config.targets);
+      if (targets.length < 2) return { state, effects: [] };
+      const currentName = state.targetPreviewName ?? activeTargetName;
+      const index = (Math.max(0, targets.indexOf(currentName)) + 1) % targets.length;
+      return { state: { ...state, targetPreviewName: targets[index] }, effects: [] };
+    }
     const nextMode = state.encoderMode === "workspaces" ? "tabs" : "workspaces";
     return {
       state: { ...state, encoderMode: nextMode, tabId: undefined },
@@ -138,7 +148,12 @@ export function reduceControlMessage(
     delete pressedCommandActions[slot];
   }
 
-  const nextState = { ...state, pressedCommandActions };
+  let nextState = { ...state, pressedCommandActions };
+  if (!message.down && action.type === "layer" && state.targetPreviewName) {
+    const name = state.targetPreviewName;
+    nextState = { ...nextState, targetPreviewName: undefined };
+    return { state: nextState, effects: [{ type: "switchTarget", name }] };
+  }
   if (action.type === "keyAlias") {
     return { state: nextState, effects: [{ type: "hid", key: action.key, down: message.down }] };
   }

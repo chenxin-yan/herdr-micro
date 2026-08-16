@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { mkdirSync, readFileSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { homedir, tmpdir } from "node:os";
 
 import { BunFileSystem } from "@effect/platform-bun";
 import { Effect } from "effect";
@@ -10,6 +10,7 @@ import {
   initializeConfig as initializeConfigEffect,
   loadConfig as loadConfigEffect,
 } from "../src/config.ts";
+import { resolveTarget } from "../src/targets.ts";
 
 const paths: string[] = [];
 const tempPath = () => {
@@ -29,7 +30,15 @@ afterEach(() => {
 describe("loadConfig", () => {
   test("returns built-in defaults when the file is missing", async () => {
     const config = await Effect.runPromise(loadConfig(tempPath()));
-    expect(config).toEqual(DEFAULT_CONFIG);
+    expect(config).toEqual({
+      ...DEFAULT_CONFIG,
+      targets: { local: { socket: `${homedir()}/.config/herdr/herdr.sock` } },
+    });
+    expect(resolveTarget(config)).toEqual({
+      name: "local",
+      config: { socket: `${homedir()}/.config/herdr/herdr.sock` },
+      socket: `${homedir()}/.config/herdr/herdr.sock`,
+    });
   });
 
   test("rejects an incomplete provided file", async () => {
@@ -38,7 +47,7 @@ describe("loadConfig", () => {
 
     const error = await Effect.runPromise(loadConfig(path).pipe(Effect.flip));
     expect(error.message).toContain(`Invalid configuration at ${path}`);
-    expect(error.message).toContain('Missing key\n  at ["encoderTimeoutSeconds"]');
+    expect(error.message).toContain('Missing key\n  at ["targets"]');
   });
 
   test("rejects unknown properties", async () => {
@@ -48,6 +57,46 @@ describe("loadConfig", () => {
     const error = await Effect.runPromise(loadConfig(path).pipe(Effect.flip));
     expect(error.message).toContain(`Invalid configuration at ${path}`);
     expect(error.message).toContain('at ["bogus"]');
+  });
+
+  test("rejects a default Target not present in targets", async () => {
+    const path = tempPath();
+    await Bun.write(path, JSON.stringify({ ...DEFAULT_CONFIG, defaultTarget: "missing" }));
+
+    const error = await Effect.runPromise(loadConfig(path).pipe(Effect.flip));
+    expect(error.message).toContain('defaultTarget "missing" is not present in targets');
+  });
+
+  test("rejects a provided file without targets", async () => {
+    const path = tempPath();
+    const { targets: _, ...missingTargets } = DEFAULT_CONFIG;
+    await Bun.write(path, JSON.stringify(missingTargets));
+
+    const error = await Effect.runPromise(loadConfig(path).pipe(Effect.flip));
+    expect(error.message).toContain('Missing key\n  at ["targets"]');
+  });
+
+  test("expands local socket homes and preserves the remote home for SSH resolution", async () => {
+    const path = tempPath();
+    const provided = {
+      ...DEFAULT_CONFIG,
+      targets: {
+        local: { socket: "~/.config/herdr/herdr.sock" },
+        minipc: { ssh: "cyan-minipc", socket: "~/run/herdr.sock" },
+      },
+      defaultTarget: "minipc",
+    };
+    await Bun.write(path, JSON.stringify(provided));
+
+    const config = await Effect.runPromise(loadConfig(path));
+    expect(config.targets).toEqual({
+      local: { socket: `${homedir()}/.config/herdr/herdr.sock` },
+      minipc: { ssh: "cyan-minipc", socket: "~/run/herdr.sock" },
+    });
+    expect(resolveTarget(config)).toMatchObject({
+      name: "minipc",
+      socket: "~/run/herdr.sock",
+    });
   });
 
   test("decodes a complete file without merging defaults", async () => {
@@ -64,7 +113,10 @@ describe("loadConfig", () => {
     };
     await Bun.write(path, JSON.stringify(provided));
 
-    expect(await Effect.runPromise(loadConfig(path))).toEqual(provided);
+    expect(await Effect.runPromise(loadConfig(path))).toEqual({
+      ...provided,
+      targets: { local: { socket: `${homedir()}/.config/herdr/herdr.sock` } },
+    });
   });
 
   test("rejects malformed JSON with a schema error", async () => {
@@ -136,7 +188,10 @@ describe("initializeConfig", () => {
     await Effect.runPromise(initializeConfig(path));
 
     expect(JSON.parse(readFileSync(path, "utf8"))).toEqual(DEFAULT_CONFIG);
-    expect(await Effect.runPromise(loadConfig(path))).toEqual(DEFAULT_CONFIG);
+    expect(await Effect.runPromise(loadConfig(path))).toEqual({
+      ...DEFAULT_CONFIG,
+      targets: { local: { socket: `${homedir()}/.config/herdr/herdr.sock` } },
+    });
   });
 
   test("refuses to overwrite an existing file", async () => {

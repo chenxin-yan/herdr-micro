@@ -73,6 +73,8 @@ Rules: the protocol itself is unversioned; instead both hellos carry the app ver
 
 ```json
 {
+  "targets": { "local": { "socket": "~/.config/herdr/herdr.sock" } },
+  "defaultTarget": "local",
   "defaultAgentCommand": ["pi"],
   "encoderTimeoutSeconds": 4,
   "commandKeys": {
