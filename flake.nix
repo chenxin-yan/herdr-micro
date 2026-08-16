@@ -59,7 +59,6 @@
         src = self;
 
         strictDeps = true;
-        __structuredAttrs = true;
 
         nativeBuildInputs = [
           pkgs.bun
@@ -104,7 +103,6 @@
         '';
 
         dontFixup = true;
-        dontStrip = true;
 
         doInstallCheck = true;
         nativeInstallCheckInputs = [ pkgs.writableTmpDirAsHomeHook ];
@@ -130,11 +128,6 @@
       packages.${system} = {
         inherit herdr-micro;
         default = herdr-micro;
-      };
-
-      apps.${system}.default = {
-        type = "app";
-        program = lib.getExe herdr-micro;
       };
 
       homeManagerModules.default = import ./nix/hm-module.nix {

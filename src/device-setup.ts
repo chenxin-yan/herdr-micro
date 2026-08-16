@@ -16,7 +16,33 @@ import { createInterface } from "node:readline/promises";
 
 import { Data, Effect } from "effect";
 
-import { DEVICE_MANIFEST, type DeviceLibrary } from "./device-manifest.ts";
+export const DEVICE_MANIFEST = {
+  circuitPython: {
+    version: "10.2.1",
+    boardId: "adafruit_macropad_rp2040",
+    url: "https://downloads.circuitpython.org/bin/adafruit_macropad_rp2040/en_US/adafruit-circuitpython-adafruit_macropad_rp2040-en_US-10.2.1.uf2",
+    sha256: "96a757c2e1c7c4718565bf2eb9cd76394a509f32c46621e669a5e5ac26887a78",
+  },
+  bundle: {
+    tag: "20260803",
+    url: "https://github.com/adafruit/Adafruit_CircuitPython_Bundle/releases/download/20260803/adafruit-circuitpython-bundle-10.x-mpy-20260803.zip",
+    sha256: "020c5069d1fde70ad18ca31e70b859b21df69967d45786275f0d99c6eb81140e",
+    root: "adafruit-circuitpython-bundle-10.x-mpy-20260803",
+  },
+  libraries: [
+    "adafruit_macropad.mpy",
+    "adafruit_debouncer.mpy",
+    "adafruit_ticks.mpy",
+    "adafruit_simple_text_display.mpy",
+    "neopixel.mpy",
+    "adafruit_display_text",
+    "adafruit_hid",
+    "adafruit_midi",
+  ],
+  deviceFiles: ["version.py", "boot.py", "protocol.py", "code.py"],
+} as const;
+
+export type DeviceLibrary = (typeof DEVICE_MANIFEST.libraries)[number];
 
 const CACHE_DIR = `${homedir()}/Library/Caches/herdr-micro`;
 const VOLUMES_DIR = "/Volumes";
@@ -84,12 +110,6 @@ export function planLibrarySync(
   targets: LibraryTrees,
 ): readonly DeviceLibrary[] {
   return libraries.filter((library) => !treesEqual(sources[library], targets[library]));
-}
-
-export type HashDecision = "use-cache" | "redownload";
-
-export function sha256Decision(actual: string | undefined, expected: string): HashDecision {
-  return actual === expected ? "use-cache" : "redownload";
 }
 
 const sha256 = (data: Uint8Array): string => createHash("sha256").update(data).digest("hex");
@@ -174,7 +194,7 @@ async function ensureArtifact(artifact: {
   mkdirSync(CACHE_DIR, { recursive: true });
   const filename = basename(new URL(artifact.url).pathname);
   const path = join(CACHE_DIR, filename);
-  if (sha256Decision(fileSha256(path), artifact.sha256) === "use-cache") return path;
+  if (fileSha256(path) === artifact.sha256) return path;
 
   rmSync(path, { force: true });
   console.log(`Downloading ${filename}`);
@@ -316,11 +336,7 @@ function writeVerified(path: string, data: Uint8Array): void {
   }
 }
 
-function copyDeviceBundle(
-  packageRoot: string,
-  volume: string,
-  version: string,
-): { readonly bootChanged: boolean; readonly order: readonly string[] } {
+function copyDeviceBundle(packageRoot: string, volume: string, version: string): boolean {
   const device = join(packageRoot, "device");
   const bootSource = readFileSync(join(device, "boot.py"));
   const bootTarget = join(volume, "boot.py");
@@ -336,7 +352,7 @@ function copyDeviceBundle(
     ],
   );
   for (const [name, data] of files) writeVerified(join(volume, name), data);
-  return { bootChanged, order: files.map(([name]) => name) };
+  return bootChanged;
 }
 
 export function findDeckSerialPorts(paths: readonly string[]): readonly string[] | undefined {
@@ -383,12 +399,12 @@ export const provisionDeck = (options: ProvisionDeckOptions) =>
       const volume = await findCircuitPythonVolume();
       const sourceLib = await bundleLibDirectory();
       const changedLibraries = syncLibraries(sourceLib, volume);
-      const copied = copyDeviceBundle(options.packageRoot, volume, options.version);
+      const bootChanged = copyDeviceBundle(options.packageRoot, volume, options.version);
       console.log(
-        `Copied ${changedLibraries.length} changed libraries, then ${copied.order.join(", ")}`,
+        `Copied ${changedLibraries.length} changed libraries, then ${DEVICE_MANIFEST.deviceFiles.join(", ")}`,
       );
 
-      if (copied.bootChanged) await waitForReset();
+      if (bootChanged) await waitForReset();
       const ports = await waitForSerialPorts();
       if (!options.isHostRunning()) {
         throw deviceError("Host launchd service is registered but not running");

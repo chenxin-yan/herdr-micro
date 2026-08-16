@@ -1,13 +1,12 @@
 import { describe, expect, test } from "bun:test";
 
-import { DEVICE_MANIFEST } from "../src/device-manifest.ts";
 import {
+  DEVICE_MANIFEST,
   classifyVolumes,
   findDeckSerialPorts,
   isCompatibleCircuitPython,
   parseBootOut,
   planLibrarySync,
-  sha256Decision,
 } from "../src/device-setup.ts";
 
 describe("Deck provisioning decisions", () => {
@@ -91,15 +90,12 @@ boot.py output follows\r
     ).toEqual(["/dev/cu.usbmodem1201", "/dev/cu.usbmodem1203"]);
   });
 
-  test("pins code.py last and verifies cached hashes exactly", () => {
+  test("pins code.py last", () => {
     expect(DEVICE_MANIFEST.deviceFiles).toEqual([
       "version.py",
       "boot.py",
       "protocol.py",
       "code.py",
     ]);
-    expect(sha256Decision("abc", "abc")).toBe("use-cache");
-    expect(sha256Decision("ABC", "abc")).toBe("redownload");
-    expect(sha256Decision(undefined, "abc")).toBe("redownload");
   });
 });

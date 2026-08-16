@@ -6,7 +6,6 @@ import {
   composeLaunchPath,
   decidePlistOwnership,
   decideUninstall,
-  downLaunchctlCommands,
   failureDetail,
   isManagedPlist,
   isNixManagedExecutable,
@@ -81,10 +80,6 @@ describe("launchd setup", () => {
       ["/bin/launchctl", "enable", target],
       ["/bin/launchctl", "bootstrap", "gui/501", "/tmp/service.plist"],
       ["/bin/launchctl", "kickstart", target],
-    ]);
-    expect(downLaunchctlCommands(501)).toEqual([
-      ["/bin/launchctl", "bootout", target],
-      ["/bin/launchctl", "disable", target],
     ]);
   });
 });

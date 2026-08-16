@@ -24,12 +24,12 @@ export const LAUNCHD_LABEL = "dev.herdr.herdr-micro";
 export const PLIST_MARKER = "HerdrMicroManaged";
 
 const HOME = homedir();
-export const INSTALL_DIR = `${HOME}/.local/share/herdr-micro`;
-export const INSTALLED_BINARY = `${INSTALL_DIR}/herdr-micro`;
-export const SHIM_PATH = `${HOME}/.local/bin/herdr-micro`;
-export const PLIST_PATH = `${HOME}/Library/LaunchAgents/${LAUNCHD_LABEL}.plist`;
-export const STDOUT_PATH = `${HOME}/Library/Logs/herdr-micro/stdout.log`;
-export const STDERR_PATH = `${HOME}/Library/Logs/herdr-micro/stderr.log`;
+const INSTALL_DIR = `${HOME}/.local/share/herdr-micro`;
+const INSTALLED_BINARY = `${INSTALL_DIR}/herdr-micro`;
+const SHIM_PATH = `${HOME}/.local/bin/herdr-micro`;
+const PLIST_PATH = `${HOME}/Library/LaunchAgents/${LAUNCHD_LABEL}.plist`;
+const STDOUT_PATH = `${HOME}/Library/Logs/herdr-micro/stdout.log`;
+const STDERR_PATH = `${HOME}/Library/Logs/herdr-micro/stderr.log`;
 
 export class SetupError extends Data.TaggedError("SetupError")<{
   readonly message: string;
@@ -58,7 +58,7 @@ export function composeLaunchPath(herdrPath: string): string {
   return [...new Set(["/usr/bin", "/bin", "/usr/sbin", "/sbin", dirname(herdrPath)])].join(":");
 }
 
-export interface LaunchAgentPaths {
+interface LaunchAgentPaths {
   readonly executable: string;
   readonly stdout: string;
   readonly stderr: string;
@@ -129,30 +129,16 @@ export function launchctlTarget(uid: number): string {
   return `gui/${uid}/${LAUNCHD_LABEL}`;
 }
 
-export function launchctlDomain(uid: number): string {
-  return `gui/${uid}`;
-}
-
 export function launchctlServiceIsRunning(output: string): boolean {
   return /^\s*state = running\s*$/m.test(output);
 }
 
-export function upLaunchctlCommands(
-  uid: number,
-  plistPath: string,
-): readonly (readonly string[])[] {
+export function upLaunchctlCommands(uid: number, plistPath: string) {
   return [
     ["/bin/launchctl", "enable", launchctlTarget(uid)],
-    ["/bin/launchctl", "bootstrap", launchctlDomain(uid), plistPath],
+    ["/bin/launchctl", "bootstrap", `gui/${uid}`, plistPath],
     ["/bin/launchctl", "kickstart", launchctlTarget(uid)],
-  ];
-}
-
-export function downLaunchctlCommands(uid: number): readonly (readonly string[])[] {
-  return [
-    ["/bin/launchctl", "bootout", launchctlTarget(uid)],
-    ["/bin/launchctl", "disable", launchctlTarget(uid)],
-  ];
+  ] as const;
 }
 
 function plistState(path: string): PlistState {
@@ -174,7 +160,7 @@ export function packageRootCandidates(moduleUrl: string, executable: string): re
   ];
 }
 
-export function packageRoot(): string {
+function packageRoot(): string {
   for (const candidate of packageRootCandidates(import.meta.url, process.execPath)) {
     if (existsSync(join(candidate, "package.json"))) return candidate;
   }
@@ -283,14 +269,14 @@ function requireLaunchctl(command: readonly string[], allow?: RegExp): void {
 function registerService(uid: number): void {
   runLaunchctl(["/bin/launchctl", "bootout", launchctlTarget(uid)]);
   const [enable, bootstrap] = upLaunchctlCommands(uid, PLIST_PATH);
-  if (!enable || !bootstrap) throw setupError("Cannot build launchctl registration commands");
   requireLaunchctl(enable);
   requireLaunchctl(bootstrap);
 }
 
 export const setupHost = (configPath: string, version: string) =>
   Effect.gen(function* () {
-    if (isNixManagedExecutable(process.execPath)) {
+    const nixManaged = isNixManagedExecutable(process.execPath);
+    if (nixManaged) {
       // Nix owns the Host binary; setup only initializes config and provisions the Deck.
       console.log("Host binary is Nix-managed; leaving it unchanged");
     } else {
@@ -317,7 +303,7 @@ export const setupHost = (configPath: string, version: string) =>
       return yield* Effect.fail(setupError("Cannot find herdr; install Herdr before setup"));
     }
 
-    if (isNixManagedExecutable(process.execPath)) {
+    if (nixManaged) {
       console.log("Service registration is Nix-managed; leaving it unchanged");
     } else {
       yield* Effect.try({
@@ -356,9 +342,6 @@ export const startService = Effect.try({
   try: () => {
     const uid = process.getuid!();
     const [enable, bootstrap, kickstart] = upLaunchctlCommands(uid, PLIST_PATH);
-    if (!enable || !bootstrap || !kickstart) {
-      throw setupError("Cannot build launchctl startup commands");
-    }
     requireLaunchctl(enable);
     if (runLaunchctl(["/bin/launchctl", "print", launchctlTarget(uid)]).status !== 0) {
       requireLaunchctl(bootstrap);
@@ -372,10 +355,12 @@ export const startService = Effect.try({
 
 export const stopService = Effect.try({
   try: () => {
-    const [bootout, disable] = downLaunchctlCommands(process.getuid!());
-    if (!bootout || !disable) throw setupError("Cannot build launchctl shutdown commands");
-    requireLaunchctl(bootout, /No such process|Could not find service/i);
-    requireLaunchctl(disable);
+    const target = launchctlTarget(process.getuid!());
+    requireLaunchctl(
+      ["/bin/launchctl", "bootout", target],
+      /No such process|Could not find service/i,
+    );
+    requireLaunchctl(["/bin/launchctl", "disable", target]);
     console.log(`Stopped ${LAUNCHD_LABEL}`);
   },
   catch: (cause) =>

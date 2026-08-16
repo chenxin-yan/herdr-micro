@@ -123,7 +123,7 @@ export const DEFAULT_CONFIG: Config = {
   },
 };
 
-export class ConfigError extends Data.TaggedError("ConfigError")<{
+class ConfigError extends Data.TaggedError("ConfigError")<{
   readonly message: string;
 }> {}
 
