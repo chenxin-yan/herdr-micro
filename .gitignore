@@ -8,6 +8,7 @@ node_modules
 
 # output
 dist
+result
 
 # Python
 __pycache__/

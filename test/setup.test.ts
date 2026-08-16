@@ -9,8 +9,10 @@ import {
   downLaunchctlCommands,
   failureDetail,
   isManagedPlist,
+  isNixManagedExecutable,
   launchctlServiceIsRunning,
   launchctlTarget,
+  packageRootCandidates,
   renderLaunchAgentPlist,
   upLaunchctlCommands,
   xmlEscape,
@@ -45,6 +47,15 @@ describe("launchd setup", () => {
     expect(decideUninstall({ kind: "regular", text: marked })).toBe("stop-and-remove");
     expect(decideUninstall({ kind: "regular", text: "<dict/>" })).toBe("refuse");
     expect(decideUninstall({ kind: "other" })).toBe("refuse");
+  });
+
+  test("recognizes executables owned by the Nix store", () => {
+    const executable = "/nix/store/abc-herdr-micro/bin/herdr-micro";
+    expect(isNixManagedExecutable(executable)).toBe(true);
+    expect(isNixManagedExecutable("/Users/test/.local/bin/herdr-micro")).toBe(false);
+    expect(packageRootCandidates("file:///\u0024bunfs/root/herdr-micro", executable)).toContain(
+      "/nix/store/abc-herdr-micro",
+    );
   });
 
   test("reports spawn failures without stderr", () => {

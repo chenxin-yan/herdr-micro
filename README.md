@@ -40,6 +40,31 @@ herdr-micro config init
 
 A provided file must contain every field; configuration is not merged with the defaults. Inspect the active path and whether it exists with `herdr-micro config`. All commands accept `--config PATH`. `config init` refuses to overwrite an existing file.
 
+## Nix
+
+Run without installing:
+
+```bash
+nix run github:chenxin-yan/herdr-micro -- --help
+```
+
+The flake also exports a Home Manager module:
+
+```nix
+{
+  inputs.herdr-micro.url = "github:chenxin-yan/herdr-micro";
+
+  # In your Home Manager configuration:
+  imports = [ inputs.herdr-micro.homeManagerModules.default ];
+  services.herdr-micro = {
+    enable = true;
+    # settings = { ... }; # When set, this must contain every schema field.
+  };
+}
+```
+
+After activation, run the Nix-installed `herdr-micro setup` to initialize configuration when absent and provision the Deck. It leaves the Nix-managed Host binary and Home Manager-managed LaunchAgent unchanged.
+
 ## Development
 
 ```bash

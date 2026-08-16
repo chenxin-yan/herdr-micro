@@ -162,11 +162,22 @@ function plistState(path: string): PlistState {
   return { kind: "regular", text: readFileSync(path, "utf8") };
 }
 
+export function isNixManagedExecutable(executable: string): boolean {
+  return resolve(executable).startsWith("/nix/store/");
+}
+
+export function packageRootCandidates(moduleUrl: string, executable: string): readonly string[] {
+  return [
+    dirname(dirname(fileURLToPath(moduleUrl))),
+    dirname(dirname(resolve(executable))),
+    join(INSTALL_DIR, "build"),
+  ];
+}
+
 export function packageRoot(): string {
-  const relative = dirname(dirname(fileURLToPath(import.meta.url)));
-  if (existsSync(join(relative, "package.json"))) return relative;
-  const installedBuild = join(INSTALL_DIR, "build");
-  if (existsSync(join(installedBuild, "package.json"))) return installedBuild;
+  for (const candidate of packageRootCandidates(import.meta.url, process.execPath)) {
+    if (existsSync(join(candidate, "package.json"))) return candidate;
+  }
   throw setupError("Cannot locate the herdr-micro package files");
 }
 
@@ -279,19 +290,24 @@ function registerService(uid: number): void {
 
 export const setupHost = (configPath: string, version: string) =>
   Effect.gen(function* () {
-    const bun = Bun.which("bun");
-    if (!bun) return yield* Effect.fail(setupError("Cannot find bun; install Bun before setup"));
+    if (isNixManagedExecutable(process.execPath)) {
+      // Nix owns the Host binary; setup only initializes config and provisions the Deck.
+      console.log("Host binary is Nix-managed; leaving it unchanged");
+    } else {
+      const bun = Bun.which("bun");
+      if (!bun) return yield* Effect.fail(setupError("Cannot find bun; install Bun before setup"));
 
-    yield* Effect.try({
-      try: () => {
-        installHostBinary(bun);
-        installShim();
-      },
-      catch: (cause) =>
-        cause instanceof SetupError
-          ? cause
-          : setupError(`Cannot install herdr-micro: ${String(cause)}`),
-    });
+      yield* Effect.try({
+        try: () => {
+          installHostBinary(bun);
+          installShim();
+        },
+        catch: (cause) =>
+          cause instanceof SetupError
+            ? cause
+            : setupError(`Cannot install herdr-micro: ${String(cause)}`),
+      });
+    }
 
     const configured = yield* configFileExists(configPath);
     if (!configured) yield* initializeConfig(configPath);
@@ -301,29 +317,33 @@ export const setupHost = (configPath: string, version: string) =>
       return yield* Effect.fail(setupError("Cannot find herdr; install Herdr before setup"));
     }
 
-    yield* Effect.try({
-      try: () => {
-        const state = plistState(PLIST_PATH);
-        if (decidePlistOwnership(state) === "external") {
-          console.log(`Service at ${PLIST_PATH} is managed elsewhere; leaving it unchanged`);
-          return;
-        }
-        writeManagedPlist(
-          renderLaunchAgentPlist({
-            executable: INSTALLED_BINARY,
-            stdout: STDOUT_PATH,
-            stderr: STDERR_PATH,
-            path: composeLaunchPath(herdr),
-          }),
-        );
-        registerService(process.getuid!());
-        console.log(`herdr-micro installed and started (${LAUNCHD_LABEL})`);
-      },
-      catch: (cause) =>
-        cause instanceof SetupError
-          ? cause
-          : setupError(`Cannot configure service: ${String(cause)}`),
-    });
+    if (isNixManagedExecutable(process.execPath)) {
+      console.log("Service registration is Nix-managed; leaving it unchanged");
+    } else {
+      yield* Effect.try({
+        try: () => {
+          const state = plistState(PLIST_PATH);
+          if (decidePlistOwnership(state) === "external") {
+            console.log(`Service at ${PLIST_PATH} is managed elsewhere; leaving it unchanged`);
+            return;
+          }
+          writeManagedPlist(
+            renderLaunchAgentPlist({
+              executable: INSTALLED_BINARY,
+              stdout: STDOUT_PATH,
+              stderr: STDERR_PATH,
+              path: composeLaunchPath(herdr),
+            }),
+          );
+          registerService(process.getuid!());
+          console.log(`herdr-micro installed and started (${LAUNCHD_LABEL})`);
+        },
+        catch: (cause) =>
+          cause instanceof SetupError
+            ? cause
+            : setupError(`Cannot configure service: ${String(cause)}`),
+      });
+    }
 
     yield* provisionDeck({
       packageRoot: packageRoot(),
