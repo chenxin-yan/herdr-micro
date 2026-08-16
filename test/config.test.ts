@@ -93,6 +93,14 @@ describe("loadConfig", () => {
     );
   });
 
+  test("rejects a non-boolean sounds setting", async () => {
+    const path = tempPath();
+    await Bun.write(path, JSON.stringify({ ...DEFAULT_CONFIG, sounds: "yes" }));
+
+    const error = await Effect.runPromise(loadConfig(path).pipe(Effect.flip));
+    expect(error.message).toContain('Expected boolean, got "yes"\n  at ["sounds"]');
+  });
+
   test("rejects nested layer actions", async () => {
     const path = tempPath();
     await Bun.write(

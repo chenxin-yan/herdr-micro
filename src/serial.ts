@@ -3,6 +3,7 @@ import { closeSync, constants, openSync, readdirSync, readSync, writeSync } from
 import { Cause, Data, Effect, Queue, Stream } from "effect";
 
 import { isRecord, retryForever } from "./herdr.ts";
+import type { SoundName } from "./sound.ts";
 
 const MAX_FRAME = 1024;
 const POLL_MS = 20;
@@ -34,7 +35,8 @@ export type HostMessage =
       readonly calm?: true;
       readonly sleep?: true;
     }
-  | { readonly t: "hid"; readonly key: string; readonly down: boolean };
+  | { readonly t: "hid"; readonly key: string; readonly down: boolean }
+  | { readonly t: "sound"; readonly name: SoundName };
 
 export class SerialError extends Data.TaggedError("SerialError")<{
   readonly message: string;

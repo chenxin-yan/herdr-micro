@@ -56,6 +56,7 @@ const ConfigSchema = Schema.Struct({
   defaultAgentCommand: Schema.Array(Schema.String),
   encoderTimeoutSeconds: Schema.Finite.check(Schema.isGreaterThan(0)),
   screensaverMinutes: Schema.Finite.check(Schema.isGreaterThan(0)),
+  sounds: Schema.Boolean,
   commandKeys: Schema.Struct({
     "1": CommandAction,
     "2": CommandAction,
@@ -92,6 +93,7 @@ export const DEFAULT_CONFIG: Config = {
   defaultAgentCommand: ["pi"],
   encoderTimeoutSeconds: 4,
   screensaverMinutes: 10,
+  sounds: true,
   commandKeys: {
     "1": { type: "sendKeys", keys: ["ctrl+c"], color: "#ff8800" },
     "2": { type: "sendKeys", keys: ["esc"], color: "#ff8800" },
