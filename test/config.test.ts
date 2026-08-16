@@ -41,13 +41,37 @@ describe("loadConfig", () => {
     });
   });
 
-  test("rejects an incomplete provided file", async () => {
+  test("merges defaults into an empty provided file", async () => {
     const path = tempPath();
-    await Bun.write(path, JSON.stringify({ defaultAgentCommand: ["pi"] }));
+    await Bun.write(path, "{}");
 
-    const error = await Effect.runPromise(loadConfig(path).pipe(Effect.flip));
-    expect(error.message).toContain(`Invalid configuration at ${path}`);
-    expect(error.message).toContain('Missing key\n  at ["targets"]');
+    expect(await Effect.runPromise(loadConfig(path))).toEqual({
+      ...DEFAULT_CONFIG,
+      targets: { local: { socket: `${homedir()}/.config/herdr/herdr.sock` } },
+    });
+  });
+
+  test("deep-merges partial overrides while keeping sibling defaults", async () => {
+    const path = tempPath();
+    await Bun.write(
+      path,
+      JSON.stringify({
+        screensaverMinutes: 30,
+        commandKeys: { "4": { type: "none" } },
+        appearance: { states: { blocked: "#123456" } },
+      }),
+    );
+
+    expect(await Effect.runPromise(loadConfig(path))).toEqual({
+      ...DEFAULT_CONFIG,
+      targets: { local: { socket: `${homedir()}/.config/herdr/herdr.sock` } },
+      screensaverMinutes: 30,
+      commandKeys: { ...DEFAULT_CONFIG.commandKeys, "4": { type: "none" } },
+      appearance: {
+        ...DEFAULT_CONFIG.appearance,
+        states: { ...DEFAULT_CONFIG.appearance.states, blocked: "#123456" },
+      },
+    });
   });
 
   test("rejects unknown properties", async () => {
@@ -67,13 +91,12 @@ describe("loadConfig", () => {
     expect(error.message).toContain('defaultTarget "missing" is not present in targets');
   });
 
-  test("rejects a provided file without targets", async () => {
+  test("rejects replaced targets that drop the defaulted defaultTarget", async () => {
     const path = tempPath();
-    const { targets: _, ...missingTargets } = DEFAULT_CONFIG;
-    await Bun.write(path, JSON.stringify(missingTargets));
+    await Bun.write(path, JSON.stringify({ targets: { minipc: { ssh: "cyan-minipc" } } }));
 
     const error = await Effect.runPromise(loadConfig(path).pipe(Effect.flip));
-    expect(error.message).toContain('Missing key\n  at ["targets"]');
+    expect(error.message).toContain('defaultTarget "local" is not present in targets');
   });
 
   test("expands local socket homes and preserves the remote home for SSH resolution", async () => {

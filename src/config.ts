@@ -1,7 +1,7 @@
 import { homedir } from "node:os";
 import { dirname } from "node:path";
 
-import { Data, Effect, FileSystem, Result, Schema, SchemaIssue } from "effect";
+import { Data, Effect, FileSystem, Result, Schema, SchemaIssue, Struct } from "effect";
 
 // adafruit_hid Keycode names accepted by the device side.
 const DIGIT_WORDS = [
@@ -60,39 +60,57 @@ const TargetConfig = Schema.Union([
     socket: Schema.optionalKey(Schema.NonEmptyString),
   }),
 ]);
+const CommandKeysSchema = Schema.Struct({
+  "1": CommandAction,
+  "2": CommandAction,
+  "3": CommandAction,
+  "4": CommandAction,
+  "5": CommandAction,
+  "6": CommandAction,
+});
+const LayerKeysSchema = Schema.Struct({
+  "1": RegularCommandAction,
+  "2": RegularCommandAction,
+  "3": RegularCommandAction,
+  "4": RegularCommandAction,
+  "5": RegularCommandAction,
+  "6": RegularCommandAction,
+});
+const BrightnessSchema = Schema.Finite.check(Schema.isBetween({ minimum: 0, maximum: 1 }));
+const StateColorsSchema = Schema.Struct({
+  blocked: HexColor,
+  done: HexColor,
+  working: HexColor,
+  idle: HexColor,
+  unknown: HexColor,
+});
 const ConfigSchema = Schema.Struct({
   targets: Schema.Record(Schema.NonEmptyString, TargetConfig),
   defaultTarget: Schema.NonEmptyString,
   defaultAgentCommand: Schema.Array(Schema.String),
   encoderTimeoutSeconds: Schema.Finite.check(Schema.isGreaterThan(0)),
   screensaverMinutes: Schema.Finite.check(Schema.isGreaterThan(0)),
-  commandKeys: Schema.Struct({
-    "1": CommandAction,
-    "2": CommandAction,
-    "3": CommandAction,
-    "4": CommandAction,
-    "5": CommandAction,
-    "6": CommandAction,
-  }),
-  layerKeys: Schema.Struct({
-    "1": RegularCommandAction,
-    "2": RegularCommandAction,
-    "3": RegularCommandAction,
-    "4": RegularCommandAction,
-    "5": RegularCommandAction,
-    "6": RegularCommandAction,
-  }),
+  commandKeys: CommandKeysSchema,
+  layerKeys: LayerKeysSchema,
   appearance: Schema.Struct({
-    brightness: Schema.Finite.check(Schema.isBetween({ minimum: 0, maximum: 1 })),
-    states: Schema.Struct({
-      blocked: HexColor,
-      done: HexColor,
-      working: HexColor,
-      idle: HexColor,
-      unknown: HexColor,
-    }),
+    brightness: BrightnessSchema,
+    states: StateColorsSchema,
   }),
 });
+
+// User files may omit any field; omissions fall back to DEFAULT_CONFIG via mergeWithDefaults.
+const toPartial = Struct.map(Schema.optionalKey);
+const PartialConfigSchema = ConfigSchema.mapFields((fields) => ({
+  ...toPartial(fields),
+  commandKeys: Schema.optionalKey(CommandKeysSchema.mapFields(toPartial)),
+  layerKeys: Schema.optionalKey(LayerKeysSchema.mapFields(toPartial)),
+  appearance: Schema.optionalKey(
+    Schema.Struct({
+      brightness: Schema.optionalKey(BrightnessSchema),
+      states: Schema.optionalKey(StateColorsSchema.mapFields(toPartial)),
+    }),
+  ),
+}));
 
 export type Config = typeof ConfigSchema.Type;
 export type TargetConfig = typeof TargetConfig.Type;
@@ -141,7 +159,24 @@ class ConfigError extends Data.TaggedError("ConfigError")<{
 }> {}
 
 const formatter = SchemaIssue.makeFormatterDefault();
-const ConfigFromJson = Schema.fromJsonString(ConfigSchema);
+const ConfigFromJson = Schema.fromJsonString(PartialConfigSchema);
+
+function mergeWithDefaults(user: typeof PartialConfigSchema.Type): Config {
+  const d = DEFAULT_CONFIG;
+  return {
+    targets: user.targets ?? d.targets,
+    defaultTarget: user.defaultTarget ?? d.defaultTarget,
+    defaultAgentCommand: user.defaultAgentCommand ?? d.defaultAgentCommand,
+    encoderTimeoutSeconds: user.encoderTimeoutSeconds ?? d.encoderTimeoutSeconds,
+    screensaverMinutes: user.screensaverMinutes ?? d.screensaverMinutes,
+    commandKeys: { ...d.commandKeys, ...user.commandKeys },
+    layerKeys: { ...d.layerKeys, ...user.layerKeys },
+    appearance: {
+      brightness: user.appearance?.brightness ?? d.appearance.brightness,
+      states: { ...d.appearance.states, ...user.appearance?.states },
+    },
+  };
+}
 
 function decodeConfig(text: string, path: string): Effect.Effect<Config, ConfigError> {
   const decoded = Schema.decodeUnknownResult(ConfigFromJson)(text, {
@@ -155,7 +190,7 @@ function decodeConfig(text: string, path: string): Effect.Effect<Config, ConfigE
       }),
     );
   }
-  const config = decoded.success;
+  const config = mergeWithDefaults(decoded.success);
   if (!(config.defaultTarget in config.targets)) {
     return Effect.fail(
       new ConfigError({
@@ -187,9 +222,7 @@ export const loadConfig = Effect.fn("loadConfig")(function* (
         new ConfigError({ message: `Cannot read configuration at ${path}: ${String(cause)}` }),
     ),
   );
-  if (text === undefined) return yield* decodeConfig(JSON.stringify(DEFAULT_CONFIG), path);
-
-  return yield* decodeConfig(text, path);
+  return yield* decodeConfig(text ?? "{}", path);
 });
 
 export const configFileExists = Effect.fn("configFileExists")(function* (
