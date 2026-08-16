@@ -12,6 +12,8 @@ A physical control deck for orchestrating a fleet of coding agents in [Herdr](ht
 
 ## Getting Started
 
+There are two ways of setting up herdr-micro with your machine and deck:
+
 ### 1. Nix Flake (Home Manager)
 
 ```nix
@@ -29,7 +31,7 @@ A physical control deck for orchestrating a fleet of coding agents in [Herdr](ht
 
 After activation, run the Nix-installed `herdr-micro setup` to initialize configuration when absent and provision the Deck. It leaves the Nix-managed Host binary and Home Manager-managed LaunchAgent unchanged.
 
-### Manual Setup
+### 2. Manual Setup
 
 #### Setup
 
