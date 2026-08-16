@@ -143,7 +143,7 @@ export const DEFAULT_CONFIG: Config = {
     "6": { type: "sendKeys", keys: ["shift+tab"], color: "#ff8800" },
   },
   appearance: {
-    brightness: 0.2,
+    brightness: 0.4,
     states: {
       blocked: "#ff0000",
       done: "#00ff00",

@@ -21,7 +21,7 @@ except ImportError:
     VERSION = "unknown"  # hand-copied without version.py: host will flag mismatch
 
 macropad = MacroPad()
-macropad.pixels.brightness = 0.2
+macropad.pixels.brightness = 0.4
 macropad.pixels.auto_write = False
 macropad.display.auto_refresh = False
 

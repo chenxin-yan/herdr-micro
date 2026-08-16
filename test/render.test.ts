@@ -107,9 +107,9 @@ describe("buildRender", () => {
     });
 
     expect(snapshot.led).toHaveLength(12);
-    expect(snapshot.led[0]).toEqual([0, 0, 51, "breathe"]);
-    expect(snapshot.led[1]).toEqual([51, 51, 51]);
-    expect(snapshot.led[5]).toEqual([51, 0, 0, "blink"]);
+    expect(snapshot.led[0]).toEqual([0, 0, 102, "breathe"]);
+    expect(snapshot.led[1]).toEqual([102, 102, 102]);
+    expect(snapshot.led[5]).toEqual([102, 0, 0, "blink"]);
     expect(snapshot.hdr).toEqual({
       boxes: ["w", "i", "i", "i", "i", "b"],
       sel: 0,
@@ -135,7 +135,7 @@ describe("buildRender", () => {
 
   test("maps working/blocked states to LED effects without a selection highlight", () => {
     const snapshot = render([agent(1, "working"), agent(2)], "p2");
-    expect(snapshot.led[0]).toEqual([0, 0, 51, "breathe"]);
+    expect(snapshot.led[0]).toEqual([0, 0, 102, "breathe"]);
   });
 
   test("truncates a long selected line to the display width", () => {
@@ -170,7 +170,7 @@ describe("buildRender", () => {
 
   test("flashes Target color then blanks LEDs while connecting", () => {
     const flash = render([agent(1)], undefined, { targetFlash: "#00ffff" });
-    expect(flash.led.every((led) => JSON.stringify(led) === JSON.stringify([0, 51, 51]))).toBe(
+    expect(flash.led.every((led) => JSON.stringify(led) === JSON.stringify([0, 102, 102]))).toBe(
       true,
     );
     expect(render([agent(1)], undefined, { connecting: true }).led).toEqual(
@@ -204,20 +204,20 @@ describe("buildRender", () => {
     );
 
     expect(base.led.slice(6)).toEqual([
-      [51, 27, 0],
-      [51, 27, 0],
-      [0, 51, 51],
-      [51, 51, 0],
-      [51, 27, 0],
-      [51, 27, 0],
+      [102, 54, 0],
+      [102, 54, 0],
+      [0, 102, 102],
+      [102, 102, 0],
+      [102, 54, 0],
+      [102, 54, 0],
     ]);
     expect(layered.led.slice(6)).toEqual([
-      [0, 51, 51],
-      [51, 27, 0],
-      [0, 51, 51],
-      [51, 51, 0],
-      [51, 51, 0],
-      [51, 27, 0],
+      [0, 102, 102],
+      [102, 54, 0],
+      [0, 102, 102],
+      [102, 102, 0],
+      [102, 102, 0],
+      [102, 54, 0],
     ]);
   });
 });
