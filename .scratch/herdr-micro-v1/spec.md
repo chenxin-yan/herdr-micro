@@ -108,9 +108,9 @@ A Command Key is unbound only when its required entry explicitly uses `{"type":"
 
 ## Distribution
 
-- **Manual**: Bun source + frozen lockfile; installer script writes LaunchAgent plist (`gui` domain, absolute paths); `config init` bootstraps the complete default config.
-- **Nix**: flake with `packages.aarch64-darwin.{herdr-micro,default}` (Bun FOD/compile pattern per nixpkgs `hunk` precedent) and `homeManagerModules.default` exposing `services.herdr-micro.{enable,package,settings}`; module installs package + LaunchAgent, generates the JSON config. No nix-darwin requirement.
-- **Device Bundle**: separate artifact (`code.py` + `lib/` + manifest) installed by one explicit script (`herdr-micro-copy-device-bundle`): validates exactly one CIRCUITPY volume, copies libs first, `code.py` last, never touches the UF2 Runtime Image.
+- **Manual**: `bunx herdr-micro setup` compiles and installs a stable Host binary from the npm package and frozen lockfile, initializes the complete default config only when absent, and registers the marked `dev.herdr.herdr-micro` LaunchAgent in the `gui` domain with absolute paths. `herdr-micro up`/`down` control that agent; `uninstall` removes only a CLI-managed service registration and preserves the CLI, config, logs, and Deck.
+- **Nix**: flake with `packages.aarch64-darwin.{herdr-micro,default}` (Bun FOD/compile pattern per nixpkgs `hunk` precedent) and `homeManagerModules.default` exposing `services.herdr-micro.{enable,package,settings}`. The module installs the package, generates JSON when complete settings are provided, and declaratively owns the same `dev.herdr.herdr-micro` LaunchAgent. No nix-darwin requirement.
+- **Deck setup**: `setup` owns a pinned manifest for CircuitPython 10.2.1, Adafruit bundle 20260803, required libraries, and the Device Bundle. Ordinary Device Bundle updates validate exactly one CIRCUITPY volume, copy libraries first and `code.py` last, and never touch the Runtime Image. When CircuitPython is absent or incompatible, setup offers a separate user-confirmed Runtime Image step: it guides the user into BOOTSEL, copies the pinned UF2, and verifies `Board ID:adafruit_macropad_rp2040` after CIRCUITPY mounts.
 
 ## Milestones
 

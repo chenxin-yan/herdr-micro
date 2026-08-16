@@ -1,11 +1,19 @@
 {
   "name": "herdr-micro",
   "version": "0.0.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/chenxin-yan/herdr-micro.git"
+  },
   "bin": {
     "herdr-micro": "src/main.ts"
   },
   "files": [
-    "src"
+    "src",
+    "device/boot.py",
+    "device/code.py",
+    "device/protocol.py",
+    "bun.lock"
   ],
   "type": "module",
   "scripts": {

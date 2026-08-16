@@ -16,7 +16,7 @@ Screensaver + burn-in shift (host semantics, device presentation):
 
 **Blocked by:** 11 — device display group structure.
 
-**Status:** ready-for-human
+**Status:** resolved
 
 - [ ] Screensaver engages after the configured idle window, disengages on any fleet/input activity; LEDs off while asleep
 - [ ] Burn-in shift verified not to clip any layout element at 1px offset
@@ -31,3 +31,4 @@ Screensaver + burn-in shift (host semantics, device presentation):
 
 - 2026-08-15: Implemented. fx:"wipe" on selection-change renders (cancellable, 2-3 frames); sleep:true after screensaverMinutes (default 10, new config field) all-idle → LEDs off + drifting mark; always-on 1px burn-in shift ~5min; selected key = state color blended 35% toward white + breathe (host math only). Gates green. Awaiting desk verification.
 - 2026-08-15: User dropped the selected-agent LED highlight; agent slots now use their plain state color/effect regardless of OLED selection.
+- 2026-08-16: Resolved after user desk verification.

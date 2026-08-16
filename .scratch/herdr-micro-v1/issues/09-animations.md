@@ -23,7 +23,7 @@ Stretch (only if trivial): device-side marquee for OLED lines the Host marks as 
 
 **Blocked by:** None (renders on top of 06–08's uncommitted work; same writer lane).
 
-**Status:** ready-for-human
+**Status:** resolved
 
 - [ ] `working` keys breathe, `blocked` keys blink, all others solid; off-page key animates per its priority state
 - [ ] OLED spinner ticks while any agent works; disappears when fleet is quiet
@@ -39,3 +39,4 @@ Stretch (only if trivial): device-side marquee for OLED lines the Host marks as 
 
 - 2026-08-15: Implemented via worker → 2 reviewers → fix pass. Supervisor-approved deviation: OLED spinner runs at 1Hz (not 2–4Hz) — each refresh blocks ~200ms and the encoder-switch debouncer is the one poll-sensitive input; cadence is a named constant (SPIN_INTERVAL_MS) for desk tuning. Fix pass also: spinner phase reset, stale-effect reset on reconnect, batched pixels.show(), wrap-safe supervisor.ticks_ms(). ADR-0003 updated with [r,g,b,fx] + spin. bun test 53 pass, check clean. Firmware needs desk verification (redeploy bundle).
 - 2026-08-15: Desk feedback: breathe felt frantic → period slowed 2s→4s (BREATHE_PERIOD_MS knob in code.py). OLED spinner removed entirely (host `spin` flag, device spinner engine, ADR-0003 mention) — the spinner acceptance item is void. OLED simplified: dropped ws/tab ids, `ws:` line, and `enc:` prefixes; last line is empty outside tab/model modes. buildRender lost the focusedWorkspace param. bun test 53 pass, check clean.
+- 2026-08-16: Resolved after user desk verification.

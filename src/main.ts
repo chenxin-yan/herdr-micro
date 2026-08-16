@@ -42,6 +42,7 @@ import {
   type PiStatus,
 } from "./render.ts";
 import { watchDeck, type DeckMessage, type DeckWriter } from "./serial.ts";
+import { setupHost, startService, stopService, uninstallService } from "./setup.ts";
 
 const HERDR_SOCKET = `${homedir()}/.config/herdr/herdr.sock`;
 
@@ -487,8 +488,20 @@ const configCommand = Command.make("config", {}, () =>
   ),
 ).pipe(Command.withSubcommands([configInitCommand]));
 
+const setupCommand = Command.make("setup", {}, () =>
+  reportCliError(
+    Effect.gen(function* () {
+      const { config } = yield* command;
+      yield* setupHost(config);
+    }),
+  ),
+);
+const upCommand = Command.make("up", {}, () => reportCliError(startService));
+const downCommand = Command.make("down", {}, () => reportCliError(stopService));
+const uninstallCommand = Command.make("uninstall", {}, () => reportCliError(uninstallService));
+
 command.pipe(
-  Command.withSubcommands([configCommand]),
+  Command.withSubcommands([configCommand, setupCommand, upCommand, downCommand, uninstallCommand]),
   Command.run({ version }),
   Effect.provide(BunServices.layer),
   BunRuntime.runMain,

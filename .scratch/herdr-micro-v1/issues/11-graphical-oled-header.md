@@ -19,7 +19,7 @@ Device (`device/code.py`):
 
 **Blocked by:** 10 — text line contents (detail line) land there.
 
-**Status:** ready-for-human
+**Status:** resolved
 
 - [ ] Header shows one box per agent with distinct shapes per state, selection underline, page dots only when multi-page
 - [ ] Host tests cover hdr construction (boxes/sel/page truncation); `bun test`, `bun run check`, and `python3 -m py_compile device/code.py` pass
@@ -28,3 +28,4 @@ Device (`device/code.py`):
 ## Comments
 
 - 2026-08-15: Implemented (normal polarity — user rejected the inverted-bar variant mid-flight, spec reverted and worker steered). Device dropped SimpleTextDisplay for a displayio group: header bitmap with per-state shapes, selection underline, page dots; 3 text lines below. ADR-0003 documents hdr. Gates green incl. py_compile. Awaiting desk verification.
+- 2026-08-16: Resolved after user desk verification.

@@ -16,7 +16,7 @@ enc:ws  dev
 
 **Blocked by:** None (line-4 model mode text lands with 08; render just switches on the mode).
 
-**Status:** ready-for-human
+**Status:** resolved
 
 - [ ] Layout above renders for: selection present, no selection, tab mode, model mode, multi-page with overflow
 - [ ] `test/render.test.ts` updated to the new layout; `bun test` and `bun run check` pass
@@ -24,3 +24,4 @@ enc:ws  dev
 ## Comments
 
 - 2026-08-15: Implemented via subagent workflow (scout → worker → 2 parallel reviewers → fix pass). Parent-verified diff: dashboardLine with nonzero state counts + right-aligned P<n>/<m> (+overflow when it fits), `> name` / `  state ws/tab` selected rows, `no agent selected` fallback, `enc:ws|tab|model` line 4. bun test 53 pass, bun run check clean. Awaiting desk verification.
+- 2026-08-16: Resolved after user desk verification.

@@ -10,7 +10,7 @@
 
 **Blocked by:** None.
 
-**Status:** ready-for-human
+**Status:** resolved
 
 - [ ] Command keys are visually distinct from idle agents with default config
 - [ ] Holding the Layer key immediately switches keys 6–11 to the layer map colors; release restores base
@@ -20,3 +20,4 @@
 ## Comments
 
 - 2026-08-15: Implemented. `color` (HexColor) required on every non-none action incl. layer. Defaults: orange sendKeys, cyan layer/newAgent, yellow keyAlias/arrows. Layer held → keys 6–11 render layerKeys colors; the held layer key keeps its own cyan (documented in DEFAULT_CONFIG comment). Render enqueued on every control message so the switch is immediate. BREAKING: existing config files must add `color` fields and `layerEncoder`. Awaiting desk verification.
+- 2026-08-16: Resolved after user desk verification.

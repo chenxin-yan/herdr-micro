@@ -129,7 +129,7 @@ interface OpenDeck {
 }
 
 const openPort = (path: string): number => {
-  const stty = Bun.spawnSync(["stty", "-f", path, "raw", "-echo"]);
+  const stty = Bun.spawnSync(["/bin/stty", "-f", path, "raw", "-echo"]);
   if (stty.exitCode !== 0) {
     throw serialFailure(`Cannot configure ${path}`, stty.stderr.toString().trim());
   }

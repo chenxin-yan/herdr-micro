@@ -23,7 +23,7 @@ Model encoder mode (`src/controls.ts` + `src/config.ts`):
 
 **Blocked by:** 06 — OLED fleet dashboard (line-4 mode display); 07 only overlaps in files, not behavior.
 
-**Status:** ready-for-human
+**Status:** resolved
 
 - [ ] Layer + encoder press enters model mode; rotation sends cw/ccw keys to the selected agent; timeout and re-press exit
 - [ ] Plain encoder press still toggles workspaces/tabs exactly as before
@@ -36,3 +36,4 @@ Model encoder mode (`src/controls.ts` + `src/config.ts`):
 - 2026-08-15: Desk bugs investigated (scout subagent). Stale-binary theory ruled out: the user ran `bun run dev` (runs src directly). Real findings: (1) layer-held + rotate was never a designed gesture (model mode required layer + encoder-press); the reducer now also sends layerEncoder keys while Layer is held, regression test added. (2) `shift+tab` flows unmodified to agent.send_keys and herdr parses it as BackTab (ESC[Z) per its own source/tests, yet the pane behaves as plain tab — still open, investigating pi-side ESC[Z handling next. `dist/herdr-micro` rebuilt; start script unchanged.
 - 2026-08-15: Thinking-cycle root cause found empirically (cat -v byte dump in a scratch pane + live pi tests): herdr 0.8.0's send_keys downgrades shift+tab to plain Tab — parse_key_combo strips SHIFT into KeyCode::BackTab (keybinds.rs:1227), then the ghostty encoder maps Tab|BackTab to GHOSTTY_KEY_TAB with the now-empty modifiers (pane/input.rs:208), shadowing the correct ESC[Z arm in input/encode.rs. Synthesizing esc [ Z also fails (pi runs the kitty keyboard protocol). Verified ctrl+p and shift+ctrl+p DO deliver. Fix: pi app.thinking.cycle now also bound to shift+ctrl+h (dotfiles pi/default.nix, needs home-manager rebuild + /reload in live pi sessions); deck layer slot 6 default changed to shift+ctrl+h. Upstream herdr bug worth reporting. Also removed the sticky model-mode latch per user: layer+rotate is momentary model cycling, layer+encoder-press is a reserved no-op, encoderMode is workspaces|tabs again.
 - 2026-08-15: Cleanup per user: shift+ctrl+h workaround reverted everywhere (deck slot 6 back to shift+tab, dotfiles pi keybinding change removed) — waiting on upstream herdrdev/herdr#1561 (fixed on master, pending release); a config comment marks the blockage. layerEncoder config knob deleted: layer-held rotation now hardcodes ctrl+p/shift+ctrl+p, symmetric with the built-in config-free base rotation. Thinking cycle stays broken until the next herdr release; everything else works.
+- 2026-08-16: Resolved after user desk verification.

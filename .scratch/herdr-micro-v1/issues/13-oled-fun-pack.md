@@ -18,7 +18,7 @@ Protocol notes (ADR-0003): add `calm?: true` and `fx?: "modeblink"`; document th
 
 **Blocked by:** None (post-0041d0e tree).
 
-**Status:** ready-for-human
+**Status:** resolved
 
 - [ ] Splash types `herdr` once per live entry; input events during splash are not lost; pending render applies after
 - [ ] Box pop fires only for changed boxes, never on session-first render; single settle refresh
@@ -36,3 +36,4 @@ Protocol notes (ADR-0003): add `calm?: true` and `fx?: "modeblink"`; document th
 
 - 2026-08-15: Implemented via workflow (worker → 2 reviewers → fix). Also carried the issue-12 highlight removal (user reversal, steered mid-run). Parent-verified: 62 tests pass, check clean, py_compile + protocol self-test OK; calm/fx:"modeblink" in protocol; brightness probed once at boot. Desk items: splash typing feel, pop visibility, whether SH1106 honors brightness (contrast breathing no-ops otherwise), bounce cadence, marquee step feel, blink usefulness.
 - 2026-08-15: Desk feedback: removed selected-name marquee (not working), encoder-mode blink, and state-change box pop — end to end (device engines + context_bitmap/invert_rect, host fx/encoderModeEffect emission, protocol fields, ADR-0003, tests). Host re-truncates the selected line. Remaining fun pack: typing splash, contrast breathing, DVD bouncer. Gates green (61 tests).
+- 2026-08-16: Resolved after user desk verification.
