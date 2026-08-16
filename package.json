@@ -1,7 +1,12 @@
 {
   "name": "herdr-micro",
   "version": "0.0.0",
-  "private": true,
+  "bin": {
+    "herdr-micro": "src/main.ts"
+  },
+  "files": [
+    "src"
+  ],
   "type": "module",
   "scripts": {
     "dev": "bun run src/main.ts",
