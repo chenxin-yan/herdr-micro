@@ -188,27 +188,11 @@ function installHostBinary(bun: string): void {
     cpSync(join(source, "device"), join(build, "device"), { recursive: true });
   }
 
-  runCommand(bun, ["install", "--production", "--frozen-lockfile"], build);
-  const temporary = join(INSTALL_DIR, `.herdr-micro-${process.pid}`);
-  rmSync(temporary, { force: true });
-  try {
-    runCommand(
-      bun,
-      [
-        "build",
-        "./src/main.ts",
-        "--compile",
-        "--minify",
-        "--no-compile-autoload-dotenv",
-        "--outfile",
-        temporary,
-      ],
-      build,
-    );
-    renameSync(temporary, INSTALLED_BINARY);
-  } finally {
-    rmSync(temporary, { force: true });
-  }
+  // package.json scripts are the single source of truth for install/compile
+  // flags; the flake build runs the same two scripts.
+  runCommand(bun, ["run", "install:prod"], build);
+  runCommand(bun, ["run", "build:binary"], build);
+  renameSync(join(build, "dist", "herdr-micro"), INSTALLED_BINARY);
 }
 
 function installShim(): void {

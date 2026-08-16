@@ -9,7 +9,10 @@
       system = "aarch64-darwin";
       pkgs = import nixpkgs { inherit system; };
       inherit (pkgs) lib;
-      version = (lib.importJSON ./package.json).version;
+      packageJson = lib.importJSON ./package.json;
+      version = packageJson.version;
+      # Single source of truth: npm's files list decides which device sources ship.
+      deviceFiles = lib.filter (f: lib.hasPrefix "device/" f) packageJson.files;
 
       node_modules = pkgs.stdenv.mkDerivation {
         pname = "herdr-micro-node_modules";
@@ -33,7 +36,8 @@
           runHook preBuild
 
           export BUN_INSTALL_CACHE_DIR=$(mktemp -d)
-          bun install --frozen-lockfile --production --ignore-scripts --no-progress
+          # Single source of truth: install flags live in package.json scripts.
+          bun run install:prod
 
           runHook postBuild
         '';
@@ -78,14 +82,10 @@
           runHook preBuild
 
           mkdir -p .bun-tmp .bun-install
+          # Single source of truth: compile flags live in package.json scripts.
           BUN_TMPDIR=$PWD/.bun-tmp \
           BUN_INSTALL=$PWD/.bun-install \
-            bun build --compile --minify \
-              --no-compile-autoload-bunfig \
-              --no-compile-autoload-dotenv \
-              ./src/main.ts \
-              --outfile herdr-micro
-          # Bytecode is omitted because compiled bytecode is coupled to Bun's exact version.
+            bun run build:binary
 
           runHook postBuild
         '';
@@ -93,11 +93,11 @@
         installPhase = ''
           runHook preInstall
 
-          install -Dm755 herdr-micro $out/bin/herdr-micro
+          install -Dm755 dist/herdr-micro $out/bin/herdr-micro
           install -Dm644 package.json $out/package.json
-          install -Dm644 device/boot.py $out/device/boot.py
-          install -Dm644 device/protocol.py $out/device/protocol.py
-          install -Dm644 device/code.py $out/device/code.py
+          for f in ${lib.escapeShellArgs deviceFiles}; do
+            install -Dm644 "$f" "$out/$f"
+          done
 
           runHook postInstall
         '';

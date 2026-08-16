@@ -1,5 +1,8 @@
 import { describe, expect, test } from "bun:test";
+import { readFileSync } from "node:fs";
 
+import packageJson from "../package.json";
+import { DEVICE_MANIFEST } from "../src/device-setup.ts";
 import {
   LAUNCHD_LABEL,
   PLIST_MARKER,
@@ -81,5 +84,33 @@ describe("launchd setup", () => {
       ["/bin/launchctl", "bootstrap", "gui/501", "/tmp/service.plist"],
       ["/bin/launchctl", "kickstart", target],
     ]);
+  });
+});
+
+// Cross-language tripwires: these truths cannot share code with Nix/npm
+// metadata, so pin both sides to the same literals here instead.
+describe("single source of truth", () => {
+  test("nix HM module mirrors the CLI launchd contract", () => {
+    const nix = readFileSync(new URL("../nix/hm-module.nix", import.meta.url), "utf8");
+    const plist = renderLaunchAgentPlist({
+      executable: "/x/bin/herdr-micro",
+      path: "/usr/bin",
+      stdout: "/x/Library/Logs/herdr-micro/stdout.log",
+      stderr: "/x/Library/Logs/herdr-micro/stderr.log",
+    });
+    expect(nix).toContain(`Label = "${LAUNCHD_LABEL}"`);
+    expect(nix).toContain("KeepAlive.SuccessfulExit = false");
+    expect(nix).toContain("ThrottleInterval = 30");
+    expect(plist).toContain("<integer>30</integer>");
+    for (const stream of ["stdout", "stderr"]) {
+      expect(nix).toContain(`Library/Logs/herdr-micro/${stream}.log`);
+    }
+  });
+
+  test("npm files ships every non-generated Device Manifest file", () => {
+    for (const file of DEVICE_MANIFEST.deviceFiles) {
+      if (file === "version.py") continue; // generated at provision time
+      expect(packageJson.files).toContain(`device/${file}`);
+    }
   });
 });

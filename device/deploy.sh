@@ -26,9 +26,8 @@ fi
 DEST="${vols[0]}"
 echo "deploying to $DEST"
 
-LIBS=(adafruit_macropad.mpy adafruit_debouncer.mpy adafruit_ticks.mpy
-  adafruit_simple_text_display.mpy neopixel.mpy
-  adafruit_display_text adafruit_hid adafruit_midi)
+# Single source of truth: the library list lives in the Device Manifest.
+mapfile -t LIBS < <(bun -e 'const { DEVICE_MANIFEST } = await import("../src/device-setup.ts"); console.log(DEVICE_MANIFEST.libraries.join("\n"));')
 
 # Libs before code.py so a mid-copy reset never runs code.py against missing imports.
 if [[ -n "$LIB_SRC" ]]; then

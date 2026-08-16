@@ -28,7 +28,9 @@
     "fmt:fix": "oxfmt",
     "check": "bun run --parallel lint fmt check:types",
     "check:fix": "bun run --sequential lint:fix fmt:fix",
-    "build": "bun run check:types && bun build ./src/main.ts --compile --minify --bytecode --format=esm --target=bun-darwin-arm64 --no-compile-autoload-dotenv --outfile ./dist/herdr-micro",
+    "build": "bun run check:types && bun run build:binary",
+    "build:binary": "bun build ./src/main.ts --compile --minify --bytecode --format=esm --target=bun-darwin-arm64 --no-compile-autoload-bunfig --no-compile-autoload-dotenv --outfile ./dist/herdr-micro",
+    "install:prod": "bun install --production --frozen-lockfile --ignore-scripts --no-progress",
     "start": "./dist/herdr-micro"
   },
   "dependencies": {
