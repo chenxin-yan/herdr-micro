@@ -37,3 +37,4 @@ OLED text (buildRender):
 ## Comments
 
 - 2026-08-15: Implemented via workflow (scout → worker → 2 reviewers → fix). Parent-verified against the live daemon: parsePiStatus on real `herdr agent read` output returns {model: claude-fable-5, thinking: high, cost: 34.879, contextPercent: 15.5}. Gates green (62 tests). Awaiting desk verification.
+- 2026-08-15: Two desk bugs root-caused against pi 0.84.1 footer source. (1) "fable-5high": detail line used "·" (U+00B7) which terminalio.FONT can't render — separator is now an ASCII space; protocol text must stay ASCII. (2) gpt-5.6-sol blank: pi appends " (sub)" after cost for subscription-backed providers and renders "• thinking off" as two words; the parse regex accepted neither. Regex now tolerates both (tests added). Known transient: "?/272k" context right after a model switch still parses as blank until pi knows the percent.

@@ -21,7 +21,7 @@ const agent = (index: number, state: Agent["state"] = "idle"): Agent => ({
   tabId: `t${index}`,
 });
 
-type Maps = Partial<Pick<Config, "commandKeys" | "layerKeys" | "layerEncoder">>;
+type Maps = Partial<Pick<Config, "commandKeys" | "layerKeys">>;
 const reduce = (
   state: ControlState,
   message: ControlMessage,
@@ -149,47 +149,29 @@ describe("reduceControlMessage", () => {
     expect(reduce(entered.state, { t: "encoderTimeout" }).state.encoderMode).toBe("workspaces");
   });
 
-  test("enters Model mode through Layer and rotates models in both directions", () => {
+  test("rotates models in both directions while Layer is held, reverting on release", () => {
     const selected = { ...initialControlState, selectedPaneId: "p1" };
     const layerDown = key(selected, 8, true, [agent(1)]).state;
-    const entered = press(layerDown, 12, [agent(1)]);
-    expect(entered.state.encoderMode).toBe("model");
-    expect(reduce(entered.state, { t: "encoder", delta: 2 }).effects).toEqual([
+    expect(reduce(layerDown, { t: "encoder", delta: 2 }).effects).toEqual([
       { type: "sendKeys", paneId: "p1", keys: ["ctrl+p", "ctrl+p"] },
     ]);
-    expect(reduce(entered.state, { t: "encoder", delta: -1 }).effects).toEqual([
+    expect(reduce(layerDown, { t: "encoder", delta: -1 }).effects).toEqual([
       { type: "sendKeys", paneId: "p1", keys: ["shift+ctrl+p"] },
     ]);
-    expect(press(entered.state, 12, [agent(1)]).state.encoderMode).toBe("workspaces");
-    expect(reduce(entered.state, { t: "encoderTimeout" }).state.encoderMode).toBe("workspaces");
-  });
-
-  test("keeps Model mode after Layer release", () => {
-    const fleet = [agent(1)];
-    const selected = { ...initialControlState, selectedPaneId: "p1" };
-    const layerDown = key(selected, 8, true, fleet).state;
-    const entered = press(layerDown, 12, fleet).state;
-    const layerUp = key(entered, 8, false, fleet).state;
-    expect(layerUp.encoderMode).toBe("model");
-    expect(reduce(layerUp, { t: "encoder", delta: 1 }).effects).toEqual([
-      { type: "sendKeys", paneId: "p1", keys: ["ctrl+p"] },
+    const layerUp = key(layerDown, 8, false, [agent(1)]).state;
+    expect(reduce(layerUp, { t: "encoder", delta: -1 }).effects).toEqual([
+      { type: "selectWorkspace", delta: 1 },
     ]);
   });
 
-  test("enters Model mode from Tab mode when Layer is held", () => {
-    const fleet = [agent(1)];
-    const tabs = press(initialControlState, 12, fleet).state;
-    const layerDown = key(tabs, 8, true, fleet).state;
-    expect(press(layerDown, 12, fleet)).toEqual({
-      state: { ...layerDown, encoderMode: "model", tabId: undefined },
-      effects: [],
-    });
+  test("reserves Layer + encoder press as a no-op", () => {
+    const layerDown = key(initialControlState, 8, true, [agent(1)]).state;
+    expect(press(layerDown, 12, [agent(1)])).toEqual({ state: layerDown, effects: [] });
   });
 
   test("logs Model rotation without a selected agent", () => {
     const layerDown = key(initialControlState, 8, true, [agent(1)]).state;
-    const entered = press(layerDown, 12, [agent(1)]).state;
-    expect(reduce(entered, { t: "encoder", delta: 1 }).effects).toEqual([
+    expect(reduce(layerDown, { t: "encoder", delta: 1 }).effects).toEqual([
       { type: "log", message: "ctrl+p ignored: no agent selected" },
     ]);
   });

@@ -6,7 +6,8 @@ A Render Snapshot contains:
 
 - `led`: twelve solid RGB arrays (`[r,g,b]`) or RGB arrays with a device-side effect (`[r,g,b,"breathe"]` or `[r,g,b,"blink"]`). An unknown effect renders as solid RGB.
 - `hdr`: the graphical Fleet header: `boxes` contains Host-derived state codes (`w`, `i`, `b`, `d`, `u`), `sel` is the selected box index or null, and one-based `page`/`pages` drive page dots. The Device draws white state shapes on the black OLED background and omits page dots for a single page.
-- `text`: exactly three OLED text lines below the header.
-- optional `sleep:true`: turn LEDs off and show the drifting OLED sleep mark until a later complete snapshot clears it.
+- `text`: exactly three OLED text lines below the header, each pre-truncated to the display width.
+- optional `calm:true`: slowly breathe display contrast without framebuffer refreshes. The Host sets this only when every Fleet agent is idle.
+- optional `sleep:true`: turn LEDs off and show the bouncing OLED sleep mark until a later complete snapshot clears it.
 
-Effects are presentation instructions only: the Host still owns Fleet interpretation and the Deck retains no durable or semantic state. Device-side slow burn-in shifting and sleep-mark drift are presentation details and do not change protocol state.
+Effects are presentation instructions only: the Host still owns Fleet interpretation and the Deck retains no durable or semantic state. The Device types a connect splash, shifts the normal display slowly for burn-in protection, and bounces the sleep mark. These presentation details do not change protocol state.

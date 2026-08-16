@@ -49,8 +49,40 @@ describe("parsePiStatus", () => {
     });
   });
 
+  test("parses the fresh-session footer with no cost and the post-switch unknown context", () => {
+    // Before the first response, pi omits $cost entirely for non-subscription providers.
+    expect(parsePiStatus("0.0%/272k (auto)  (openai) codex • high")).toEqual({
+      model: "codex",
+      thinking: "high",
+      cost: undefined,
+      contextPercent: 0,
+    });
+    // Right after a model switch pi shows "?" until it knows the context percent.
+    expect(parsePiStatus("?/272k (auto)  claude-fable-5 • high")).toEqual({
+      model: "claude-fable-5",
+      thinking: "high",
+      cost: undefined,
+      contextPercent: undefined,
+    });
+  });
+
   test("returns undefined for non-pi output", () => {
     expect(parsePiStatus("build passed\nready")).toBeUndefined();
+  });
+
+  test("parses subscription cost and disabled thinking footer variants", () => {
+    expect(parsePiStatus("↑4k ↓1k $12.400 (sub) 40.0%/272k  (openai) gpt-5.6-sol • high")).toEqual({
+      model: "gpt-5.6-sol",
+      thinking: "high",
+      cost: 12.4,
+      contextPercent: 40,
+    });
+    expect(parsePiStatus("↑4k ↓1k $0.100 5.0%/272k  gpt-5.6-sol • thinking off")).toEqual({
+      model: "gpt-5.6-sol",
+      thinking: "off",
+      cost: 0.1,
+      contextPercent: 5,
+    });
   });
 });
 
@@ -81,7 +113,7 @@ describe("buildRender", () => {
     });
 
     expect(snapshot.led).toHaveLength(12);
-    expect(snapshot.led[0]).toEqual([18, 18, 51, "breathe"]);
+    expect(snapshot.led[0]).toEqual([0, 0, 51, "breathe"]);
     expect(snapshot.led[1]).toEqual([51, 51, 51]);
     expect(snapshot.led[5]).toEqual([51, 0, 0, "blink"]);
     expect(snapshot.hdr).toEqual({
@@ -90,15 +122,17 @@ describe("buildRender", () => {
       page: 1,
       pages: 2,
     });
-    expect(snapshot.text).toEqual(["project", "> agent-1  working 4m", "fable-5·high $34 15%"]);
+    expect(snapshot.text).toEqual(["project", "> agent-1  working 4m", "fable-5 high $34 15%"]);
     expect(snapshot.text.every((text) => text.length <= 21)).toBe(true);
   });
 
-  test("renders minimally without a selected agent", () => {
+  test("renders minimally without a selected agent and marks an all-idle fleet calm", () => {
     const snapshot = render([agent(1)]);
     expect(snapshot.hdr).toEqual({ boxes: ["i"], sel: null, page: 1, pages: 1 });
     expect(snapshot.text).toEqual(["project", "no agent selected", ""]);
     expect(snapshot.sleep).toBeUndefined();
+    expect(snapshot.calm).toBe(true);
+    expect(render([agent(1, "working")]).calm).toBeUndefined();
   });
 
   test("maps working/blocked states to LED effects without a selection highlight", () => {
@@ -106,20 +140,16 @@ describe("buildRender", () => {
     expect(snapshot.led[0]).toEqual([0, 0, 51, "breathe"]);
   });
 
-  test("truncates a long selected name so state and duration still fit", () => {
+  test("truncates a long selected line to the display width", () => {
     const snapshot = render([{ ...agent(1), name: "a-very-long-agent-name" }], "p1");
-    expect(snapshot.text[1]).toBe("> a-very-long-a  idle");
-    expect(snapshot.text[1]).toHaveLength(21);
+    expect(snapshot.text[1]).toBe("> a-very-long-agent-n");
   });
 
-  test("renders Tab and Model encoder modes on the context line", () => {
+  test("renders Tab encoder mode on the context line", () => {
     const tabMode = { mode: "tabs" as const, tab: { label: "tests", index: 1, count: 3 } };
     expect(
       buildRender([agent(1)], 0, "p1", "project", tabMode, false, DEFAULT_CONFIG).text[0],
     ).toBe("tabs 2/3 tests");
-    expect(
-      buildRender([], 0, undefined, "project", { mode: "model" }, false, DEFAULT_CONFIG).text[0],
-    ).toBe("model");
   });
 
   test("caps the graphical header and omits an out-of-range selection", () => {

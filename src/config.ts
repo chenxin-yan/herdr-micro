@@ -56,10 +56,6 @@ const ConfigSchema = Schema.Struct({
   defaultAgentCommand: Schema.Array(Schema.String),
   encoderTimeoutSeconds: Schema.Finite.check(Schema.isGreaterThan(0)),
   screensaverMinutes: Schema.Finite.check(Schema.isGreaterThan(0)),
-  layerEncoder: Schema.Struct({
-    cw: Schema.NonEmptyArray(Schema.NonEmptyString),
-    ccw: Schema.NonEmptyArray(Schema.NonEmptyString),
-  }),
   commandKeys: Schema.Struct({
     "1": CommandAction,
     "2": CommandAction,
@@ -96,10 +92,6 @@ export const DEFAULT_CONFIG: Config = {
   defaultAgentCommand: ["pi"],
   encoderTimeoutSeconds: 4,
   screensaverMinutes: 10,
-  layerEncoder: {
-    cw: ["ctrl+p"],
-    ccw: ["shift+ctrl+p"],
-  },
   commandKeys: {
     "1": { type: "sendKeys", keys: ["ctrl+c"], color: "#ff8800" },
     "2": { type: "sendKeys", keys: ["esc"], color: "#ff8800" },
@@ -115,6 +107,8 @@ export const DEFAULT_CONFIG: Config = {
     "3": { type: "none" },
     "4": { type: "sendKeys", keys: ["left"], color: "#ffff00" },
     "5": { type: "sendKeys", keys: ["right"], color: "#ffff00" },
+    // Blocked by herdr 0.8.0: send_keys downgrades shift+tab to plain Tab
+    // (herdrdev/herdr#1561, fixed on master, pending release).
     "6": { type: "sendKeys", keys: ["shift+tab"], color: "#ff8800" },
   },
   appearance: {

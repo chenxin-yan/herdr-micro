@@ -31,6 +31,7 @@ export type HostMessage =
         readonly page: number;
         readonly pages: number;
       };
+      readonly calm?: true;
       readonly sleep?: true;
     }
   | { readonly t: "hid"; readonly key: string; readonly down: boolean };

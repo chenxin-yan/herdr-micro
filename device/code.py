@@ -46,6 +46,17 @@ root.append(sleep_label)
 macropad.display.root_group = root
 macropad.display.refresh()
 
+# SH1106 brightness support varies by CircuitPython/display driver. Probe once;
+# unsupported contrast breathing is intentionally a silent no-op.
+try:
+    FULL_DISPLAY_BRIGHTNESS = float(macropad.display.brightness)
+    macropad.display.brightness = max(0.3, FULL_DISPLAY_BRIGHTNESS * 0.9)
+    macropad.display.brightness = FULL_DISPLAY_BRIGHTNESS
+    DISPLAY_BRIGHTNESS_SUPPORTED = True
+except Exception:
+    FULL_DISPLAY_BRIGHTNESS = 1.0
+    DISPLAY_BRIGHTNESS_SUPPORTED = False
+
 kbd = Keyboard(usb_hid.devices)
 serial = usb_cdc.data
 serial.timeout = 0
@@ -64,10 +75,18 @@ led_phase_ms = 0
 last_blink_on = None
 splash_active = False
 splash_index = 0
+splash_text_index = 0
 last_splash_tick = 0
+last_splash_text_tick = 0
 pending_render = None
+calm = False
+last_contrast_tick = supervisor.ticks_ms()
+contrast_phase_ms = 0
 asleep = False
-sleep_position = 0
+sleep_x = 8
+sleep_y = 16
+sleep_dx = 2
+sleep_dy = 2
 last_sleep_tick = 0
 burn_position = 0
 last_burn_tick = supervisor.ticks_ms()
@@ -78,10 +97,16 @@ BREATHE_PERIOD_MS = 4000
 # 2 * BLINK_HALF_PERIOD_MS or blink glitches when led_phase_ms wraps.
 BLINK_HALF_PERIOD_MS = 500
 LED_TICK_INTERVAL_MS = 50
-SPLASH_STEP_INTERVAL_MS = 400 // 12
-SLEEP_DRIFT_INTERVAL_MS = 15000
+SPLASH_LED_INTERVAL_MS = 400 // 12
+SPLASH_TEXT_INTERVAL_MS = 150
+CONTRAST_PERIOD_MS = 6000
+CONTRAST_TICK_INTERVAL_MS = 100
+SLEEP_BOUNCE_INTERVAL_MS = 400
+SLEEP_MIN_X = 4
+SLEEP_MAX_X = 94
+SLEEP_MIN_Y = 10
+SLEEP_MAX_Y = 55
 BURN_SHIFT_INTERVAL_MS = 300000
-SLEEP_POSITIONS = ((8, 16), (88, 16), (88, 55), (8, 55), (48, 35))
 BURN_POSITIONS = ((0, 0), (1, 0), (1, 1), (0, 1))
 
 
@@ -114,7 +139,7 @@ def draw_header(header):
     boxes = header.get("boxes", [])[:16]
     selected = header.get("sel")
     for index, agent_state in enumerate(boxes):
-        x = index * 6
+        x = index * 6 + (index // 3) * 2
         if agent_state == "w":
             fill_rect(x, 1, 5, 7)
         elif agent_state == "i":
@@ -147,16 +172,27 @@ def set_text(text):
         text_lines[index].text = text[index] if index < len(text) else ""
 
 
-def show_normal(text, header):
+def show_normal(text, header, force=False):
     global shown_display
     signature = json.dumps([text, header])
     normal_group.hidden = False
     sleep_label.hidden = True
     set_text(text)
     draw_header(header)
-    if shown_display != signature:
+    if force or shown_display != signature:
         shown_display = signature
         macropad.display.refresh()
+
+
+def set_calm(next_calm):
+    global calm, last_contrast_tick, contrast_phase_ms
+    if calm == next_calm:
+        return
+    calm = next_calm
+    contrast_phase_ms = CONTRAST_PERIOD_MS // 4  # start at full brightness, then ease down
+    last_contrast_tick = supervisor.ticks_ms()
+    if DISPLAY_BRIGHTNESS_SUPPORTED:
+        macropad.display.brightness = FULL_DISPLAY_BRIGHTNESS
 
 
 def show_message(text):
@@ -164,7 +200,7 @@ def show_message(text):
     asleep = False
     macropad.pixels.fill((0, 0, 0))
     macropad.pixels.show()
-    show_normal(text[:3], {})
+    show_normal(text[:3], {}, force=True)
 
 
 def show_waiting():
@@ -172,14 +208,15 @@ def show_waiting():
 
 
 def enter_sleep(now):
-    global asleep, sleep_position, last_sleep_tick, shown_display
+    global asleep, sleep_x, sleep_y, sleep_dx, sleep_dy, last_sleep_tick, shown_display
     asleep = True
     macropad.pixels.fill((0, 0, 0))
     macropad.pixels.show()
     normal_group.hidden = True
     sleep_label.hidden = False
-    sleep_position = 0
-    sleep_label.x, sleep_label.y = SLEEP_POSITIONS[sleep_position]
+    sleep_x, sleep_y = 8, 16
+    sleep_dx, sleep_dy = 2, 2
+    sleep_label.x, sleep_label.y = sleep_x, sleep_y
     last_sleep_tick = now
     shown_display = None
     macropad.display.refresh()
@@ -187,6 +224,8 @@ def enter_sleep(now):
 
 def apply_render(msg):
     global last_blink_on, asleep
+    now = supervisor.ticks_ms()
+
     led = msg.get("led", [])
     for index in range(min(12, len(led))):
         entry = led[index]
@@ -198,33 +237,44 @@ def apply_render(msg):
         led_fx[index] = entry[3] if len(entry) > 3 and entry[3] in ("breathe", "blink") else None
         macropad.pixels[index] = color
     last_blink_on = None
+    set_calm(msg.get("calm") is True)
 
     if msg.get("sleep") is True:
         if not asleep:
-            enter_sleep(supervisor.ticks_ms())
+            enter_sleep(now)
         return
 
     asleep = False
     macropad.pixels.show()
     text = list(msg.get("text", []))[:3]
-    header = msg.get("hdr", {})
-    show_normal(text, header)
+    while len(text) < 3:
+        text.append("")
+    show_normal(text, msg.get("hdr", {}))
 
 
 def start_splash():
-    global splash_active, splash_index, last_splash_tick, pending_render
+    global splash_active, splash_index, splash_text_index
+    global last_splash_tick, last_splash_text_tick, pending_render
+    now = supervisor.ticks_ms()
     splash_active = True
     splash_index = 0
-    last_splash_tick = supervisor.ticks_ms()
+    splash_text_index = 1
+    last_splash_tick = now
+    last_splash_text_tick = now
     pending_render = None
+    set_calm(False)
     macropad.pixels.fill((0, 0, 0))
     macropad.pixels.show()
+    show_normal(["h", "", ""], {}, force=True)
 
 
 def tick_animations(now):
-    global splash_active, splash_index, last_splash_tick, pending_render
+    global splash_active, splash_index, splash_text_index
+    global last_splash_tick, last_splash_text_tick, pending_render
     global last_led_tick, led_phase_ms, last_blink_on
-    global sleep_position, last_sleep_tick, burn_position, last_burn_tick
+    global contrast_phase_ms, last_contrast_tick
+    global sleep_x, sleep_y, sleep_dx, sleep_dy, last_sleep_tick
+    global burn_position, last_burn_tick
 
     # Burn-in protection applies to waiting/mismatch too: they may be the
     # longest-lived static screens on an unattended Deck.
@@ -239,28 +289,54 @@ def tick_animations(now):
         return
 
     if splash_active:
-        if ticks_diff(now, last_splash_tick) < SPLASH_STEP_INTERVAL_MS:
-            return
-        last_splash_tick = now
-        macropad.pixels.fill((0, 0, 0))
-        if splash_index < 12:
+        if splash_index < 12 and ticks_diff(now, last_splash_tick) >= SPLASH_LED_INTERVAL_MS:
+            last_splash_tick = now
+            macropad.pixels.fill((0, 0, 0))
             macropad.pixels[splash_index] = (0, 128, 128)
             macropad.pixels.show()
             splash_index += 1
-            return
-        splash_active = False
-        if pending_render is not None:
-            render = pending_render
-            pending_render = None
-            apply_render(render)
-        else:
-            macropad.pixels.show()
+        if ticks_diff(now, last_splash_text_tick) >= SPLASH_TEXT_INTERVAL_MS:
+            last_splash_text_tick = now
+            if splash_text_index < 5:
+                splash_text_index += 1
+                show_normal(["herdr"[:splash_text_index], "", ""], {}, force=True)
+            elif splash_text_index == 5:
+                splash_text_index = 6
+                show_normal(["herdr", "v " + VERSION, ""], {}, force=True)
+            else:
+                splash_text_index = 7
+        if splash_index >= 12 and splash_text_index >= 7:
+            splash_active = False
+            if pending_render is not None:
+                render = pending_render
+                pending_render = None
+                apply_render(render)
+            else:
+                macropad.pixels.show()
         return
 
+    if calm and DISPLAY_BRIGHTNESS_SUPPORTED:
+        elapsed = ticks_diff(now, last_contrast_tick)
+        if elapsed >= CONTRAST_TICK_INTERVAL_MS:
+            last_contrast_tick = now
+            contrast_phase_ms = (contrast_phase_ms + elapsed) % CONTRAST_PERIOD_MS
+            contrast = 0.65 + 0.35 * math.sin(
+                contrast_phase_ms * 2 * math.pi / CONTRAST_PERIOD_MS
+            )
+            macropad.display.brightness = FULL_DISPLAY_BRIGHTNESS * contrast
+
     if asleep:
-        if ticks_diff(now, last_sleep_tick) >= SLEEP_DRIFT_INTERVAL_MS:
-            sleep_position = (sleep_position + 1) % len(SLEEP_POSITIONS)
-            sleep_label.x, sleep_label.y = SLEEP_POSITIONS[sleep_position]
+        if ticks_diff(now, last_sleep_tick) >= SLEEP_BOUNCE_INTERVAL_MS:
+            next_x = sleep_x + sleep_dx
+            next_y = sleep_y + sleep_dy
+            if next_x < SLEEP_MIN_X or next_x > SLEEP_MAX_X:
+                sleep_dx = -sleep_dx
+                next_x = sleep_x + sleep_dx
+            if next_y < SLEEP_MIN_Y or next_y > SLEEP_MAX_Y:
+                sleep_dy = -sleep_dy
+                next_y = sleep_y + sleep_dy
+            sleep_x, sleep_y = next_x, next_y
+            sleep_label.x, sleep_label.y = sleep_x, sleep_y
             last_sleep_tick = now
             macropad.display.refresh()
         return
@@ -300,6 +376,7 @@ def change_state(next_state):
         last_blink_on = None
         asleep = False
         shown_display = None
+        set_calm(False)
     state = next_state
 
 
@@ -383,11 +460,18 @@ while True:
 
     n = serial.in_waiting
     if n:
+        latest_render = None
         for raw in reader.feed(serial.read(n)):
             try:
-                handle(json.loads(raw))
-            except (ValueError, TypeError):
+                msg = json.loads(raw)
+                if msg.get("t") == "render":
+                    latest_render = msg  # Render Snapshots are last-write-wins per read batch.
+                else:
+                    handle(msg)
+            except (AttributeError, ValueError, TypeError):
                 pass  # malformed frame: drop line, framing already resynced
+        if latest_render is not None:
+            handle(latest_render)
 
     # Poll-sensitive encoder-switch sampling above always precedes OLED animation work.
     tick_animations(supervisor.ticks_ms())

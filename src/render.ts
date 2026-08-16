@@ -32,29 +32,20 @@ const stateLed = (config: Config, state: AgentState): DeviceLed => {
   return effect ? [...base, effect] : base;
 };
 
-const selectedLed = (config: Config, state: AgentState): DeviceLed => {
-  const base = color(config.appearance.states[state], config.appearance.brightness);
-  const white = Math.round(255 * config.appearance.brightness);
-  const highlighted = base.map((channel) => Math.round(channel + (white - channel) * 0.35)) as [
-    number,
-    number,
-    number,
-  ];
-  return [...highlighted, "breathe"];
-};
-
 const OFF = [0, 0, 0] as const;
 
 export interface EncoderModeRender {
-  readonly mode: "workspaces" | "tabs" | "model";
+  readonly mode: "workspaces" | "tabs";
   readonly tab?: { readonly label: string; readonly index: number; readonly count: number };
 }
 
 export interface PiStatus {
   readonly model: string;
   readonly thinking: string;
-  readonly cost: number;
-  readonly contextPercent: number;
+  // Absent on a fresh session: pi omits $cost until usage is nonzero, and
+  // shows "?" context right after a model switch.
+  readonly cost: number | undefined;
+  readonly contextPercent: number | undefined;
 }
 
 export interface RenderOptions {
@@ -68,13 +59,16 @@ const COMMAND_SLOTS = ["1", "2", "3", "4", "5", "6"] as const;
 
 export function parsePiStatus(text: string): PiStatus | undefined {
   for (const value of text.split("\n")) {
+    // pi footer variants: "$34.879 (sub) 15.5%/1.0M" for subscription providers,
+    // "model • thinking off" when thinking is disabled, no "$cost" before the
+    // first response, and "?/272k" context right after a model switch.
     const match = value.match(
-      /\$(\d+(?:\.\d+)?)\s+(\d+(?:\.\d+)?)%\/\S+.*?\s(\S+)\s+•\s+(\S+)\s*$/,
+      /(?:\$(\d+(?:\.\d+)?)(?:\s+\(sub\))?\s+)?(?:(\d+(?:\.\d+)?)%|\?)\/\S+.*?\s(\S+)\s+•\s+(?:thinking\s+)?(\S+)\s*$/,
     );
     if (!match) continue;
     return {
-      cost: Number(match[1]),
-      contextPercent: Number(match[2]),
+      cost: match[1] === undefined ? undefined : Number(match[1]),
+      contextPercent: match[2] === undefined ? undefined : Number(match[2]),
       model: match[3]!,
       thinking: match[4]!,
     };
@@ -91,7 +85,11 @@ export const formatDuration = (milliseconds: number): string => {
 
 const detailLine = (detail: PiStatus | undefined): string => {
   if (!detail) return "";
-  const suffix = `·${detail.thinking} $${Math.floor(detail.cost)} ${Math.floor(detail.contextPercent)}%`;
+  // ASCII only: terminalio.FONT has no glyph for characters like "·".
+  const cost = detail.cost === undefined ? "" : ` $${Math.floor(detail.cost)}`;
+  const context =
+    detail.contextPercent === undefined ? "" : ` ${Math.floor(detail.contextPercent)}%`;
+  const suffix = ` ${detail.thinking}${cost}${context}`;
   let model = detail.model;
   if (model.length + suffix.length > OLED_WIDTH) model = model.replace(/^claude-/, "");
   return line(`${model.slice(0, Math.max(0, OLED_WIDTH - suffix.length))}${suffix}`);
@@ -113,10 +111,7 @@ export function buildRender(
   const led: ReadonlyArray<DeviceLed> = [
     ...Array.from({ length: PAGE_SIZE }, (_, index) => {
       const agent = page.slots[index];
-      if (!agent) return OFF;
-      return agent.paneId === selectedPaneId
-        ? selectedLed(config, agent.state)
-        : stateLed(config, agent.state);
+      return agent ? stateLed(config, agent.state) : OFF;
     }),
     page.offPageState === undefined ? OFF : stateLed(config, page.offPageState),
     ...COMMAND_SLOTS.map((slot) => {
@@ -127,22 +122,17 @@ export function buildRender(
     }),
   ];
   const context =
-    encoder.mode === "model"
-      ? "model"
-      : encoder.mode === "tabs"
-        ? encoder.tab
-          ? `tabs ${encoder.tab.index + 1}/${encoder.tab.count} ${encoder.tab.label}`
-          : "tabs"
-        : (workspaceLabel ?? "");
+    encoder.mode === "tabs"
+      ? encoder.tab
+        ? `tabs ${encoder.tab.index + 1}/${encoder.tab.count} ${encoder.tab.label}`
+        : "tabs"
+      : (workspaceLabel ?? "");
   const duration =
     selected && options.selectedStateSince !== undefined
       ? formatDuration((options.now ?? Date.now()) - options.selectedStateSince)
       : undefined;
-  const stateSuffix = selected
-    ? `  ${selected.state}${duration === undefined ? "" : ` ${duration}`}`
-    : "";
   const selectedLine = selected
-    ? `> ${selected.name.slice(0, Math.max(0, OLED_WIDTH - stateSuffix.length - 2))}${stateSuffix}`
+    ? `> ${selected.name}  ${selected.state}${duration === undefined ? "" : ` ${duration}`}`
     : "no agent selected";
   const boxes = fleet.slice(0, HEADER_CAPACITY).map(({ state }) => HEADER_STATES[state]);
   const snapshot: RenderSnapshot = {
@@ -155,6 +145,7 @@ export function buildRender(
       pages: page.pageCount,
     },
     text: [line(context), line(selectedLine), detailLine(options.detail)],
+    ...(fleet.every(({ state }) => state === "idle") ? { calm: true } : {}),
     ...(options.sleep ? { sleep: true } : {}),
   };
   return snapshot;

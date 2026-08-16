@@ -159,9 +159,8 @@ const hostProgram = (config: Config) =>
       if (detailFiber) Effect.runFork(Fiber.interrupt(detailFiber));
       detailFiber = undefined;
     };
-    const restartDetailPolling = () => {
+    const startDetailPolling = () => {
       stopDetailPolling();
-      state.selectedDetail = undefined;
       const paneId = state.controls.selectedPaneId;
       if (!paneId || !state.active?.live) return;
       let failureLogged = false;
@@ -186,6 +185,17 @@ const hostProgram = (config: Config) =>
         ),
       );
       detailFiber = Effect.runFork(poll.pipe(Effect.repeat(Schedule.spaced("3 seconds"))));
+    };
+    const restartDetailPolling = () => {
+      state.selectedDetail = undefined;
+      startDetailPolling();
+    };
+    // Sent keys usually change the footer (model, thinking, cost); re-read soon
+    // instead of waiting out the 3s cadence. Keeps the current value: no flash.
+    let detailNudgeTimer: ReturnType<typeof setTimeout> | undefined;
+    const nudgeDetailPolling = () => {
+      if (detailNudgeTimer) clearTimeout(detailNudgeTimer);
+      detailNudgeTimer = setTimeout(startDetailPolling, 500);
     };
     const syncDetailPolling = (previousPaneId: string | undefined) => {
       if (state.controls.selectedPaneId === previousPaneId) return;
@@ -255,7 +265,10 @@ const hostProgram = (config: Config) =>
             return sendRequest(HERDR_SOCKET, "agent.send_keys", {
               target: effect.paneId,
               keys: effect.keys,
-            }).pipe(Effect.asVoid);
+            }).pipe(
+              Effect.tap(() => Effect.sync(nudgeDetailPolling)),
+              Effect.asVoid,
+            );
           case "hid":
             return deck.write({ t: "hid", key: effect.key, down: effect.down });
           case "newAgent":

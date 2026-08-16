@@ -6,7 +6,7 @@ export interface ControlState {
   readonly pageIndex: number;
   readonly selectedPaneId: string | undefined;
   readonly workspaceId: string | undefined;
-  readonly encoderMode: "workspaces" | "tabs" | "model";
+  readonly encoderMode: "workspaces" | "tabs";
   readonly tabId: string | undefined;
   readonly pressedCommandActions: Readonly<Partial<Record<keyof CommandKeys, CommandAction>>>;
 }
@@ -65,7 +65,7 @@ export function reduceControlMessage(
   state: ControlState,
   message: ControlMessage,
   fleet: ReadonlyArray<Agent>,
-  config: Pick<Config, "commandKeys" | "layerKeys" | "layerEncoder">,
+  config: Pick<Config, "commandKeys" | "layerKeys">,
 ): { readonly state: ControlState; readonly effects: ReadonlyArray<ControlEffect> } {
   if (message.t === "encoderTimeout") {
     return {
@@ -75,8 +75,9 @@ export function reduceControlMessage(
   }
   if (message.t === "encoder") {
     if (message.delta === 0) return { state, effects: [] };
-    if (state.encoderMode === "model") {
-      const binding = message.delta > 0 ? config.layerEncoder.cw : config.layerEncoder.ccw;
+    if (isLayerHeld(state.pressedCommandActions)) {
+      // Built-in like base rotation: layer-held rotation cycles pi's model.
+      const binding = message.delta > 0 ? ["ctrl+p"] : ["shift+ctrl+p"];
       const keys = Array.from({ length: Math.abs(message.delta) }, () => binding).flat();
       return { state, effects: sendSelected(state, keys) };
     }
@@ -92,15 +93,9 @@ export function reduceControlMessage(
   }
   if (message.k === 12) {
     if (!message.down) return { state, effects: [] };
-    const layerHeld = isLayerHeld(state.pressedCommandActions);
-    const nextMode =
-      state.encoderMode === "model"
-        ? "workspaces"
-        : layerHeld
-          ? "model"
-          : state.encoderMode === "workspaces"
-            ? "tabs"
-            : "workspaces";
+    // Layer + encoder press is reserved for a future gesture.
+    if (isLayerHeld(state.pressedCommandActions)) return { state, effects: [] };
+    const nextMode = state.encoderMode === "workspaces" ? "tabs" : "workspaces";
     return {
       state: { ...state, encoderMode: nextMode, tabId: undefined },
       effects: nextMode === "tabs" ? [{ type: "enterTabMode" }] : [],
