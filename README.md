@@ -24,7 +24,7 @@ The built-in configuration connects to the local `~/.config/herdr/herdr.sock`. A
 }
 ```
 
-Remote Targets use the named SSH host and default to the same Herdr socket path on that host. They require non-interactive SSH authentication (keys or an agent); tunnels run with BatchMode and never prompt. These fields are part of the complete configuration written by `herdr-micro config init`; provided configuration files are not merged with defaults.
+Remote Targets use the named SSH host and default to the same Herdr socket path on that host. They require non-interactive SSH authentication (keys or an agent); tunnels run with BatchMode and never prompt. When `targets` is set, it replaces the built-in record wholesale, so keep a `local` Target (or set `defaultTarget`) when defining it.
 
 ## Getting Started
 
@@ -40,7 +40,7 @@ There are two ways of setting up herdr-micro with your machine and deck:
   imports = [ inputs.herdr-micro.homeManagerModules.default ];
   services.herdr-micro = {
     enable = true;
-    # settings = { ... }; # When set, this must contain every schema field.
+    # settings = { ... }; # Partial config, deep-merged over the built-in defaults.
   };
 }
 ```
@@ -83,7 +83,7 @@ With no file at `~/.config/herdr-micro/config.json`, the Host uses its built-in 
 herdr-micro config init
 ```
 
-A provided file must contain every field; configuration is not merged with the defaults. Inspect the active path and whether it exists with `herdr-micro config`. Select another path for the Host and config commands with `--config PATH`. `config init` refuses to overwrite an existing file.
+A provided file may omit any field; omissions fall back to the built-in defaults (`targets`, when set, replaces the defaults wholesale). Inspect the active path and whether it exists with `herdr-micro config`. Select another path for the Host and config commands with `--config PATH`. `config init` refuses to overwrite an existing file.
 
 ### Default Mapping
 
